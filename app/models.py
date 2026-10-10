@@ -1,9 +1,11 @@
+
 from datetime import datetime, timezone
 
+from flask_login import UserMixin
 from app import db
 
 
-class User(db.Model):
+class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -40,10 +42,7 @@ class User(db.Model):
 class SecureFile(db.Model):
     __tablename__ = "secure_files"
 
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
+    id = db.Column(db.Integer, primary_key=True)
 
     user_id = db.Column(
         db.Integer,
@@ -98,10 +97,7 @@ class SecureFile(db.Model):
 class SecurityEvent(db.Model):
     __tablename__ = "security_events"
 
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
+    id = db.Column(db.Integer, primary_key=True)
 
     user_id = db.Column(
         db.Integer,
