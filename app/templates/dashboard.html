@@ -4,19 +4,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard | Secure File System</title>
+    <title>Dashboard | Tamper-Aware Secure File Management</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 30px;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: white;
+            padding: 28px;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .section {
+            margin-top: 28px;
+        }
+
+        input, button {
+            padding: 10px;
+            margin-top: 8px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+            overflow-wrap: anywhere;
+        }
+
+        .message {
+            padding: 10px;
+            background: #e8f7ed;
+            margin: 8px 0;
+            border-radius: 6px;
+        }
+
+        .empty {
+            color: #6b7280;
+        }
+    </style>
 </head>
+
 <body>
+<div class="container">
     <h1>Tamper-Aware Secure File Management System</h1>
 
-    <h2>Welcome, {{ current_user.username }}!</h2>
+    <p>Welcome, <strong>{{ current_user.username }}</strong>!</p>
 
-    <p>Authentication: Successful</p>
-    <p>AES encryption: Next implementation stage</p>
-    <p>File integrity monitoring: Next implementation stage</p>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+        <p class="message">{{ message }}</p>
+    {% endfor %}
+
+    <section class="section">
+        <h2>Upload a File</h2>
+
+        <p>
+            Files are encrypted with AES-256-GCM before being saved.
+        </p>
+
+        <form method="POST"
+              action="{{ url_for('main.upload_file') }}"
+              enctype="multipart/form-data">
+
+            <input type="file" name="file" required>
+            <button type="submit">Encrypt and Upload</button>
+        </form>
+
+        <p>Maximum file size: 16 MiB.</p>
+    </section>
+
+    <section class="section">
+        <h2>Your Files</h2>
+
+        {% if files %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Encryption</th>
+                        <th>Status</th>
+                        <th>Uploaded</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for file in files %}
+                        <tr>
+                            <td>{{ file.original_filename }}</td>
+                            <td>{{ file.file_size }} bytes</td>
+                            <td>{{ file.encryption_algorithm }}</td>
+                            <td>{{ file.status }}</td>
+                            <td>
+                                {{ file.uploaded_at.strftime("%Y-%m-%d %H:%M")
+                                   if file.uploaded_at else "N/A" }}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('main.download_file', file_id=file.id) }}">
+                                    Download
+                                            </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="empty">No files uploaded yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="section">
+        <h2>Security Features</h2>
+        <ul>
+            <li>Password hashing and authenticated sessions</li>
+            <li>AES-256-GCM file encryption</li>
+            <li>SHA-256 hashes stored for integrity checking</li>
+            <li>File upload security event logging</li>
+        </ul>
+        <p>Download verification and tamper alerts are the next stages.</p>
+    </section>
 
     <form method="POST" action="{{ url_for('main.logout') }}">
         <button type="submit">Logout</button>
     </form>
+</div>
 </body>
 </html>

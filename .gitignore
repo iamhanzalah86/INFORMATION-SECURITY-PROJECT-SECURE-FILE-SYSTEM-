@@ -14,3 +14,11 @@ logs/*
 
 instance/
 .pytest_cache/
+
+# Encryption secrets
+instance/encryption.key
+
+# Python environment and cache
+.venv/
+__pycache__/
+*.pyc
