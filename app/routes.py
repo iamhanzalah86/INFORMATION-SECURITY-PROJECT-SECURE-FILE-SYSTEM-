@@ -1,3 +1,4 @@
+from app.integrity import verify_file_integrity
 import hmac
 from io import BytesIO
 from flask import abort
@@ -386,6 +387,90 @@ def download_file(file_id):
         mimetype="application/octet-stream",
     )
 
+# --------------------------------------------------
+# MANUAL INTEGRITY SCAN
+# --------------------------------------------------
+
+@main.route("/integrity-scan", methods=["POST"])
+@login_required
+def integrity_scan():
+    # Scan only files belonging to the logged-in user.
+    files = db.session.scalars(
+        select(SecureFile).where(
+            SecureFile.user_id == current_user.id
+        )
+    ).all()
+
+    storage_dir = encrypted_storage_path()
+    checked = 0
+    secure_count = 0
+    issue_count = 0
+
+    for file_record in files:
+        stored_name = file_record.encrypted_filename
+
+        if (
+            not stored_name
+            or Path(stored_name).name != stored_name
+        ):
+            valid = False
+            reason = "INVALID_STORED_FILENAME"
+        else:
+            stored_path = storage_dir / stored_name
+            valid, reason = verify_file_integrity(
+                stored_path,
+                file_record.sha256_hash or "",
+            )
+
+        checked += 1
+
+        if valid:
+            secure_count += 1
+
+            # Preserve prior tampering alerts for investigation.
+            if file_record.status != "TAMPERED":
+                file_record.status = "SECURE"
+
+        else:
+            issue_count += 1
+            was_already_tampered = (
+                file_record.status == "TAMPERED"
+            )
+
+            file_record.status = "TAMPERED"
+
+            # Avoid creating a duplicate event on every scan
+            # for a file that is already marked TAMPERED.
+            if not was_already_tampered:
+                event = SecurityEvent(
+                    user_id=current_user.id,
+                    file_id=file_record.id,
+                    event_type="FILE_TAMPERING_DETECTED",
+                    description=(
+                        f"Integrity scan detected {reason} for "
+                        f"{file_record.original_filename}."
+                    ),
+                )
+                db.session.add(event)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "Integrity scan could not be saved"
+        )
+        flash("Unable to save integrity scan results.", "error")
+        return redirect(url_for("main.dashboard"))
+
+    flash(
+        f"Integrity scan completed: {checked} checked, "
+        f"{secure_count} verified, {issue_count} issue(s).",
+        "success" if issue_count == 0 else "error",
+    )
+
+    return redirect(url_for("main.dashboard"))
+
 
 # --------------------------------------------------
 # DATABASE TEST
@@ -406,3 +491,22 @@ def database_test():
             select(func.count()).select_from(SecurityEvent)
         ),
     })
+
+# --------------------------------------------------
+# SECURITY EVENT REVIEW
+# --------------------------------------------------
+
+@main.route("/security-events")
+@login_required
+def security_events():
+    events = db.session.scalars(
+        select(SecurityEvent)
+        .where(SecurityEvent.user_id == current_user.id)
+        .order_by(SecurityEvent.id.desc())
+        .limit(200)
+    ).all()
+
+    return render_template(
+        "security_events.html",
+        events=events,
+    )

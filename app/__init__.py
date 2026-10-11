@@ -1,4 +1,4 @@
-
+from flask_wtf.csrf import CSRFProtect
 import os
 from pathlib import Path
 
@@ -16,6 +16,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 # Initialize extensions.
 db = SQLAlchemy()
 login_manager = LoginManager()
+csrf = CSRFProtect()
 
 
 def create_app():
@@ -29,8 +30,26 @@ def create_app():
             "SECRET_KEY is missing. Configure it in the project .env file."
         )
 
+    secure_cookie = os.environ.get(
+        "SESSION_COOKIE_SECURE", "false"
+    ).strip().lower()
+
+    if secure_cookie not in {"true", "false"}:
+        raise RuntimeError(
+            "SESSION_COOKIE_SECURE must be true or false."
+        )
+
     app.config["SECRET_KEY"] = secret_key
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = (
+        secure_cookie == "true"
+    )
+    app.config["WTF_CSRF_TIME_LIMIT"] = 3600
+
+    # Initialize CSRF protection.
+    csrf.init_app(app)
 
     # SQLite database.
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///secure_files.db"

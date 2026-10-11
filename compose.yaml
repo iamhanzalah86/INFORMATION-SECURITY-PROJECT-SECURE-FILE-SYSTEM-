@@ -1,0 +1,13 @@
+
+services:
+  web:
+    build: .
+    container_name: secure-file-system
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./instance:/app/instance
+      - ./storage:/app/storage
+    restart: unless-stopped

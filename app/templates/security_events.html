@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Security Events</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            padding: 30px;
+            color: #1f2937;
+        }
+        main {
+            max-width: 1000px;
+            margin: auto;
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            overflow-wrap: anywhere;
+        }
+        .empty {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Security Event Review</h1>
+    <p>Recent security events associated with your account.</p>
+
+    {% if events %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Event ID</th>
+                    <th>Type</th>
+                    <th>File ID</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                    <tr>
+                        <td>{{ event.id }}</td>
+                        <td>{{ event.event_type }}</td>
+                        <td>{{ event.file_id or "N/A" }}</td>
+                        <td>{{ event.description }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No security events recorded yet.</p>
+    {% endif %}
+
+    <p>
+        <a href="{{ url_for('main.dashboard') }}">
+            Back to Dashboard
+        </a>
+    </p>
+</main>
+</body>
+</html>
