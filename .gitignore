@@ -1,24 +1,17 @@
 .venv/
+venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.vercel/
 
-secure_files.db
-
+# Secrets
 .env
+instance/
 
+# Local data
+*.db
 storage/encrypted/*
 !storage/encrypted/.gitkeep
-
 logs/*
 !logs/.gitkeep
-
-instance/
-.pytest_cache/
-
-# Encryption secrets
-instance/encryption.key
-
-# Python environment and cache
-.venv/
-__pycache__/
-*.pyc

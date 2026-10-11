@@ -1,172 +1,122 @@
+{% extends 'app_base.html' %}
+{% from '_macros.html' import icon, csrf, time %}
+{% set active = 'dashboard' %}
+{% block title %}Dashboard{% endblock %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard | Tamper-Aware Secure File Management</title>
+{% macro ftype(name) -%}
+  {%- set ext = (name.rsplit('.',1)[1] if '.' in name else 'file')|lower -%}
+  {%- if ext in ['pdf'] -%}<span class="ftype ico-bad">PDF</span>
+  {%- elif ext in ['doc','docx','txt','md','rtf','odt'] -%}<span class="ftype ico-info">{{ ext[:4]|upper }}</span>
+  {%- elif ext in ['xls','xlsx','csv'] -%}<span class="ftype ico-ok">{{ ext[:4]|upper }}</span>
+  {%- elif ext in ['png','jpg','jpeg','gif','webp','svg'] -%}<span class="ftype ico-warn">{{ ext[:4]|upper }}</span>
+  {%- elif ext in ['zip','rar','7z','gz','tar'] -%}<span class="ftype ico-warn">{{ ext[:4]|upper }}</span>
+  {%- else -%}<span class="ftype ico-brand">{{ ext[:4]|upper }}</span>{%- endif -%}
+{%- endmacro %}
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            margin: 0;
-            padding: 30px;
-            color: #1f2937;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: auto;
-            background: white;
-            padding: 28px;
-            border-radius: 12px;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-        }
-
-        .section {
-            margin-top: 28px;
-        }
-
-        input, button {
-            padding: 10px;
-            margin-top: 8px;
-        }
-
-        button {
-            cursor: pointer;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 16px;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #e5e7eb;
-            overflow-wrap: anywhere;
-        }
-
-        .message {
-            padding: 10px;
-            background: #e8f7ed;
-            margin: 8px 0;
-            border-radius: 6px;
-        }
-
-        .empty {
-            color: #6b7280;
-        }
-    </style>
-</head>
-
-<body>
-<div class="container">
-    <h1>Tamper-Aware Secure File Management System</h1>
-
-    <p>Welcome, <strong>{{ current_user.username }}</strong>!</p>
-
-    {% for category, message in get_flashed_messages(with_categories=true) %}
-        <p class="message">{{ message }}</p>
-    {% endfor %}
-
-    <section class="section">
-        <h2>Upload a File</h2>
-
-        <p>
-            Files are encrypted with AES-256-GCM before being saved.
-        </p>
-
-        <form method="POST"
-              action="{{ url_for('main.upload_file') }}"
-              enctype="multipart/form-data">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-            <input type="file" name="file" required>
-            <button type="submit">Encrypt and Upload</button>
-        </form>
-
-        <p>Maximum file size: 16 MiB.</p>
-    </section>
-
-    <section class="section">
-        <h2>Integrity Monitoring</h2>
-
-        <p>
-        Scan your stored encrypted files for missing files
-        or unexpected changes.
-        </p>
-
-        <form method="POST" action="{{ url_for('main.integrity_scan') }}">
-             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit">Run Integrity Scan</button>
-        </form>
-    </section>
-
-    <section class="section">
-        <h2>Your Files</h2>
-
-        {% if files %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Filename</th>
-                        <th>Size</th>
-                        <th>Encryption</th>
-                        <th>Status</th>
-                        <th>Uploaded</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {% for file in files %}
-                        <tr>
-                            <td>{{ file.original_filename }}</td>
-                            <td>{{ file.file_size }} bytes</td>
-                            <td>{{ file.encryption_algorithm }}</td>
-                            <td>{{ file.status }}</td>
-                            <td>
-                                {{ file.uploaded_at.strftime("%Y-%m-%d %H:%M")
-                                   if file.uploaded_at else "N/A" }}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('main.download_file', file_id=file.id) }}">
-                                    Download
-                                            </a>
-                            </td>
-                            <p>
-                                 <a href="{{ url_for('main.security_events') }}">
-                                      Review Security Events
-                                         </a>
-                                                </p>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="empty">No files uploaded yet.</p>
-        {% endif %}
-    </section>
-
-    <section class="section">
-        <h2>Security Features</h2>
-        <ul>
-            <li>Password hashing and authenticated sessions</li>
-            <li>AES-256-GCM file encryption</li>
-            <li>SHA-256 hashes stored for integrity checking</li>
-            <li>File upload security event logging</li>
-        </ul>
-        <p>Download verification and tamper alerts are the next stages.</p>
-    </section>
-
-    <form method="POST" action="{{ url_for('main.logout') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit">Logout</button>
+{% block body %}
+<div class="page-head">
+  <div>
+    <h1>Hello, {{ current_user.username }} 👋</h1>
+    <p>Your vault at a glance · last integrity scan: {{ time(stats.last_scan) if stats.last_scan else 'never' }}</p>
+  </div>
+  <div class="actions">
+    <form method="POST" action="{{ url_for('main.integrity_scan') }}" data-once>
+      {{ csrf() }}
+      <button class="btn" type="submit">{{ icon('scan') }} Run integrity scan</button>
     </form>
+    <a class="btn btn-primary" href="#upload">{{ icon('upload') }} Upload file</a>
+  </div>
 </div>
-</body>
-</html>
+
+<section class="stats">
+  <div class="card stat"><div class="ico ico-brand">{{ icon('folder') }}</div><div><div class="num">{{ stats.total }}</div><div class="lbl">Encrypted files</div></div></div>
+  <div class="card stat"><div class="ico ico-ok">{{ icon('shield') }}</div><div><div class="num">{{ stats.secure }}</div><div class="lbl">Verified secure</div></div></div>
+  <div class="card stat"><div class="ico {{ 'ico-bad' if stats.tampered else 'ico-info' }}">{{ icon('alert') }}</div><div><div class="num">{{ stats.tampered }}</div><div class="lbl">Tamper alerts</div></div></div>
+  <div class="card stat"><div class="ico ico-info">{{ icon('database') }}</div><div><div class="num">{{ stats.size }}</div><div class="lbl">Data protected</div></div></div>
+</section>
+
+<section class="grid-2" id="upload">
+  <div class="card">
+    <div class="card-head"><h2>{{ icon('upload') }} Upload &amp; encrypt</h2><span class="tag">AES-256-GCM</span></div>
+    <div class="card-pad">
+      <form method="POST" action="{{ url_for('main.upload_file') }}" enctype="multipart/form-data">
+        {{ csrf() }}
+        <label class="drop" data-max-mb="{{ '%g'|format(max_mb) }}">
+          <div class="big">{{ icon('upload') }}</div>
+          <b>Drop a file here or click to browse</b>
+          <span class="muted">Encrypted before it's stored · max {{ '%g'|format(max_mb) }} MB</span>
+          <input type="file" name="file" required>
+        </label>
+        <div class="chosen" id="chosen">
+          <span>{{ icon('file') }} <span id="chosen-name"></span></span>
+          <button class="btn btn-primary btn-sm" id="upload-btn" type="submit">{{ icon('lock') }}<span> Encrypt &amp; upload</span></button>
+        </div>
+        <div class="progress"><i></i></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card posture">
+    {% if stats.total == 0 %}
+      <div class="ring idle">{{ icon('shield') }}</div><h3>Vault is empty</h3>
+      <span class="muted">Upload your first file to start monitoring.</span>
+    {% elif stats.tampered %}
+      <div class="ring bad">{{ icon('shield-alert') }}</div><h3 style="color:var(--bad)">Attention needed</h3>
+      <span class="muted">{{ stats.tampered }} file{{ 's' if stats.tampered != 1 }} failed integrity verification.</span>
+    {% else %}
+      <div class="ring ok">{{ icon('shield') }}</div><h3 style="color:var(--ok)">All files verified</h3>
+      <span class="muted">No tampering detected in your vault.</span>
+    {% endif %}
+    <div class="chips"><span class="chip">{{ icon('lock') }} AES-256-GCM</span><span class="chip">{{ icon('hash') }} SHA-256</span></div>
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <div class="card-head">
+    <h2>{{ icon('folder') }} Your files</h2>
+    <div class="toolbar"><div class="search">{{ icon('search') }}<input id="file-search" type="search" placeholder="Search files…" aria-label="Search files"></div></div>
+  </div>
+  {% if files %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th class="hide-sm">Size</th><th>Status</th><th class="hide-sm">Uploaded</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody id="files-body">
+      {% for f in files %}
+        <tr>
+          <td><div class="fname">{{ ftype(f.original_filename) }}<div><b>{{ f.original_filename }}</b><small>SHA-256 {{ f.sha256_hash[:12] }}…</small></div></div></td>
+          <td class="hide-sm">{{ f.file_size|filesize }}</td>
+          <td>{% if f.status == 'TAMPERED' %}<span class="badge badge-bad">Tampered</span>{% else %}<span class="badge badge-ok">Secure</span>{% endif %}</td>
+          <td class="hide-sm muted">{{ time(f.uploaded_at, 'date') }}</td>
+          <td>
+            <div class="row-actions">
+              <a class="btn btn-sm" href="{{ url_for('main.download_file', file_id=f.id) }}">{{ icon('download') }} <span class="hide-sm">Download</span></a>
+              <form method="POST" action="{{ url_for('main.delete_file', file_id=f.id) }}" data-confirm="Permanently delete '{{ f.original_filename|replace("'", "") }}'? This cannot be undone.">
+                {{ csrf() }}<button class="btn btn-sm btn-danger btn-icon" type="submit" aria-label="Delete {{ f.original_filename }}">{{ icon('trash') }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="empty"><div class="big">{{ icon('folder') }}</div><b>No files yet</b>Upload a file above and it will appear here, encrypted.</div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>{{ icon('activity') }} Recent activity</h2><a href="{{ url_for('main.security_events') }}" class="btn btn-sm">View all {{ icon('arrow') }}</a></div>
+  {% if recent_events %}
+  <ul class="feed">
+    {% for e in recent_events %}
+      {% set bad = 'TAMPER' in e.event_type or e.event_type == 'LOGIN_FAILED' %}
+      <li>
+        <div class="dot {{ 'ico-bad' if bad else 'ico-ok' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED'] else 'ico-info' }}">{{ icon('alert' if bad else 'check' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED'] else 'activity') }}</div>
+        <div><b>{{ e.event_type.replace('_',' ').title() }}</b><small>{{ e.description }}</small><time>{{ time(e.timestamp) }}</time></div>
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}<div class="empty">No activity yet.</div>{% endif %}
+</section>
+{% endblock %}

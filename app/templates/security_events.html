@@ -1,75 +1,48 @@
+{% extends 'app_base.html' %}
+{% from '_macros.html' import icon, time %}
+{% set active = 'events' %}
+{% block title %}Security events{% endblock %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Security Events</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            padding: 30px;
-            color: #1f2937;
-        }
-        main {
-            max-width: 1000px;
-            margin: auto;
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-            overflow-wrap: anywhere;
-        }
-        .empty {
-            color: #666;
-        }
-    </style>
-</head>
-<body>
-<main>
-    <h1>Security Event Review</h1>
-    <p>Recent security events associated with your account.</p>
+{% macro cat(t) -%}
+{%- if 'TAMPER' in t or t == 'LOGIN_FAILED' -%}alerts{%- elif t.startswith('FILE_') -%}files{%- elif t == 'INTEGRITY_SCAN' -%}scans{%- else -%}account{%- endif -%}
+{%- endmacro %}
 
-    {% if events %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Event ID</th>
-                    <th>Type</th>
-                    <th>File ID</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for event in events %}
-                    <tr>
-                        <td>{{ event.id }}</td>
-                        <td>{{ event.event_type }}</td>
-                        <td>{{ event.file_id or "N/A" }}</td>
-                        <td>{{ event.description }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p class="empty">No security events recorded yet.</p>
-    {% endif %}
+{% block body %}
+<div class="page-head">
+  <div><h1>Security events</h1><p>Your most recent {{ events|length }} audit-trail entries.</p></div>
+  <a class="btn" href="{{ url_for('main.dashboard') }}">&larr; Back to dashboard</a>
+</div>
 
-    <p>
-        <a href="{{ url_for('main.dashboard') }}">
-            Back to Dashboard
-        </a>
-    </p>
-</main>
-</body>
-</html>
+<section class="card">
+  <div class="card-head">
+    <div class="filter">
+      <button class="pill on" data-filter="all" type="button">All</button>
+      <button class="pill" data-filter="alerts" type="button">Alerts</button>
+      <button class="pill" data-filter="files" type="button">Files</button>
+      <button class="pill" data-filter="scans" type="button">Scans</button>
+      <button class="pill" data-filter="account" type="button">Account</button>
+    </div>
+  </div>
+  {% if events %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Event</th><th class="hide-sm">File</th><th>Details</th></tr></thead>
+      <tbody id="events-body">
+      {% for e in events %}
+        {% set c = cat(e.event_type) %}
+        <tr data-cat="{{ c }}">
+          <td class="muted" style="white-space:nowrap">{{ time(e.timestamp) }}</td>
+          <td><span class="badge {{ 'badge-bad' if c=='alerts' else 'badge-ok' if c in ['files','scans'] else '' }}"
+                    {% if c=='account' %}style="background:var(--info-soft);color:var(--info)"{% endif %}>{{ e.event_type.replace('_',' ').title() }}</span></td>
+          <td class="hide-sm">{% if e.file_id %}<span class="tag">#{{ e.file_id }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td style="overflow-wrap:anywhere;min-width:220px">{{ e.description }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="empty"><div class="big">{{ icon('activity') }}</div><b>No events yet</b>Security events will appear here as you use your vault.</div>
+  {% endif %}
+</section>
+{% endblock %}

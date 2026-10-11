@@ -1,0 +1,34 @@
+{% from '_macros.html' import icon, flashes, csrf %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% include '_head.html' %}
+  <title>{% block title %}{% endblock %} · {{ app_name }}</title>
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark">{{ icon('shield') }}</span>{{ app_name }}</a>
+    <div>
+      <h2>Your files, encrypted<br>and tamper-proof.</h2>
+      <p class="lead">Every file is sealed with AES-256-GCM and fingerprinted with SHA-256, so any change is caught before you download it.</p>
+      <ul class="feat">
+        <li><span class="ico">{{ icon('lock') }}</span><div><b>AES-256-GCM encryption</b>Files are encrypted before they are ever stored.</div></li>
+        <li><span class="ico">{{ icon('hash') }}</span><div><b>Integrity monitoring</b>SHA-256 checks detect missing or modified files.</div></li>
+        <li><span class="ico">{{ icon('mail') }}</span><div><b>Email verification</b>One-time codes protect sign-up and password resets.</div></li>
+      </ul>
+    </div>
+    <small style="color:#8da0bd">© {{ app_name }} · Information Security Project</small>
+  </aside>
+  <main class="auth-main">
+    <button class="btn btn-ghost btn-icon theme-float" data-theme-toggle aria-label="Toggle theme" type="button">{{ icon('moon') }}</button>
+    <div class="auth-card">
+      <a class="brand auth-brand" href="{{ url_for('main.index') }}"><span class="brand-mark">{{ icon('shield') }}</span>{{ app_name }}</a>
+      {{ flashes() }}
+      {% block body %}{% endblock %}
+    </div>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

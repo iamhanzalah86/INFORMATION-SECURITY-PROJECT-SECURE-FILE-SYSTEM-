@@ -1,0 +1,41 @@
+{% from '_macros.html' import icon, flashes, csrf %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% include '_head.html' %}
+  <title>{% block title %}{% endblock %} · {{ app_name }}</title>
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="{{ url_for('main.dashboard') }}"><span class="brand-mark">{{ icon('shield') }}</span>{{ app_name }}</a>
+  <button class="btn btn-icon" data-menu type="button" aria-label="Menu">{{ icon('menu') }}</button>
+</div>
+<div class="scrim"></div>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('main.dashboard') }}"><span class="brand-mark">{{ icon('shield') }}</span>{{ app_name }}</a>
+    <nav class="nav">
+      <div class="nav-label" style="margin-top:0">Workspace</div>
+      <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if active=='dashboard' }}">{{ icon('grid') }} Dashboard</a>
+      <a href="{{ url_for('main.security_events') }}" class="{{ 'active' if active=='events' }}">{{ icon('activity') }} Security events</a>
+    </nav>
+    <div class="side-bottom">
+      <button class="btn side-btn" data-theme-toggle type="button">{{ icon('moon') }} Switch theme</button>
+      <div class="usercard">
+        <div class="avatar">{{ current_user.username[0]|upper }}</div>
+        <div class="grow"><b>{{ current_user.username }}</b><small>{{ current_user.email }}</small></div>
+      </div>
+      <form method="POST" action="{{ url_for('main.logout') }}">
+        {{ csrf() }}
+        <button class="btn side-btn" type="submit">{{ icon('logout') }} Log out</button>
+      </form>
+    </div>
+  </aside>
+  <main class="content">
+    {{ flashes() }}
+    {% block body %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

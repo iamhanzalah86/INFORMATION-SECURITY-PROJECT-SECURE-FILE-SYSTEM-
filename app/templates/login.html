@@ -1,33 +1,22 @@
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login | Secure File System</title>
-</head>
-<body>
-    <h1>Login</h1>
-
-    {% for category, message in get_flashed_messages(with_categories=true) %}
-        <p>{{ message }}</p>
-    {% endfor %}
-
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <label for="username">Username</label>
-        <input id="username" name="username" required>
-
-        <label for="password">Password</label>
-        <input id="password" name="password"
-               type="password" required>
-
-        <button type="submit">Login</button>
-    </form>
-
-    <p>New user?
-        <a href="{{ url_for('main.register') }}">Create an account</a>
-    </p>
-</body>
-</html>
+{% extends 'auth_base.html' %}
+{% block title %}Log in{% endblock %}
+{% block body %}
+<h1>Welcome back</h1>
+<p class="sub">Log in to manage your encrypted files.</p>
+<form method="POST" data-once>
+  {{ csrf() }}
+  <div class="field">
+    <label for="username">Username or email</label>
+    <div class="input-wrap">{{ icon('user') }}
+      <input class="input" id="username" name="username" value="{{ identifier }}" autocomplete="username" required autofocus></div>
+  </div>
+  <div class="field">
+    <div class="row-split"><label for="password">Password</label><a href="{{ url_for('main.forgot_password') }}" style="font-size:13px;font-weight:600">Forgot password?</a></div>
+    <div class="input-wrap">{{ icon('lock') }}
+      <input class="input has-toggle" id="password" name="password" type="password" autocomplete="current-password" required>
+      <button class="toggle-pw" type="button" aria-label="Show password">{{ icon('eye') }}</button></div>
+  </div>
+  <button class="btn btn-primary btn-block" type="submit">Log in {{ icon('arrow') }}</button>
+</form>
+<p class="auth-foot">New here? <a href="{{ url_for('main.register') }}"><b>Create an account</b></a></p>
+{% endblock %}

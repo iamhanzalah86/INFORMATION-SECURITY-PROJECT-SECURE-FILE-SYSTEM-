@@ -1,59 +1,45 @@
+{% from '_macros.html' import icon %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Secure File Management System</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            margin: 0;
-            padding: 0;
-        }
-
-        .container {
-            width: 80%;
-            max-width: 900px;
-            margin: 80px auto;
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        h1 {
-            margin-bottom: 10px;
-        }
-
-        .status {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 10px 20px;
-            border-radius: 6px;
-            background: #e7f7ed;
-        }
-    </style>
+  {% include '_head.html' %}
+  <title>{{ app_name }} · Tamper-aware secure file storage</title>
 </head>
-
 <body>
-
-<div class="container">
-
-    <h1>🔐 Tamper-Aware Secure File Management System</h1>
-
-    <p>
-        Secure file storage using AES encryption and integrity verification.
-    </p>
-
-    <div class="status">
-        Backend Status: <strong>Running</strong>
+<header class="hero">
+  <nav class="land-nav">
+    <a class="brand" href="{{ url_for('main.index') }}" style="color:#fff"><span class="brand-mark">{{ icon('shield') }}</span>{{ app_name }}</a>
+    <div class="actions">
+      <button class="btn btn-ghost btn-icon" data-theme-toggle type="button" style="color:#fff;border-color:rgba(255,255,255,.2)" aria-label="Toggle theme">{{ icon('moon') }}</button>
+      <a class="btn btn-sm" href="{{ url_for('main.login') }}">Log in</a>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('main.register') }}">Get started</a>
     </div>
+  </nav>
+  <div class="hero-inner">
+    <span class="eyebrow">{{ icon('lock') }} AES-256-GCM · SHA-256 · Email-verified accounts</span>
+    <h1>Store files that <span>tell you</span> when they've been tampered with.</h1>
+    <p>A tamper-aware file vault. Everything is encrypted before it's saved, fingerprinted for integrity, and verified again every time you download.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="{{ url_for('main.register') }}">Create free account {{ icon('arrow') }}</a>
+      <a class="btn" href="{{ url_for('main.login') }}">Log in</a>
+    </div>
+  </div>
+</header>
 
-</div>
+<section class="features">
+  <div class="card fcard"><div class="ico ico-brand">{{ icon('lock') }}</div><h3>Encrypted at rest</h3><p>Files are sealed with AES-256-GCM using a fresh random nonce each time. Plain data never touches storage.</p></div>
+  <div class="card fcard"><div class="ico ico-ok">{{ icon('shield') }}</div><h3>Tamper detection</h3><p>A SHA-256 fingerprint is stored for every file and checked on download and during integrity scans.</p></div>
+  <div class="card fcard"><div class="ico ico-info">{{ icon('activity') }}</div><h3>Audit trail</h3><p>Uploads, downloads, sign-ins and alerts are recorded in your personal security event log.</p></div>
+</section>
 
+<h2 class="section-title">How it works</h2>
+<section class="steps">
+  <div class="card step"><div class="n">1</div><b>Register</b><span>Create an account and confirm your email with a one-time code.</span></div>
+  <div class="card step"><div class="n">2</div><b>Upload</b><span>Drop a file. It's encrypted and hashed in the same step.</span></div>
+  <div class="card step"><div class="n">3</div><b>Monitor</b><span>Run integrity scans to catch missing or modified files.</span></div>
+  <div class="card step"><div class="n">4</div><b>Download</b><span>Verified, decrypted, and delivered — or blocked if altered.</span></div>
+</section>
+<footer class="foot">{{ app_name }} · Tamper-Aware Secure File Management System</footer>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </body>
 </html>
