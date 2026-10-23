@@ -4,7 +4,11 @@
 {% block title %}Security events{% endblock %}
 
 {% macro cat(t) -%}
+<<<<<<< HEAD
 {%- if 'TAMPER' in t or t in ['LOGIN_FAILED','RECOVERY_FAILED'] -%}alerts{%- elif t.startswith('FILE_') -%}files{%- elif t == 'INTEGRITY_SCAN' -%}scans{%- else -%}account{%- endif -%}
+=======
+{%- if 'TAMPER' in t or t == 'LOGIN_FAILED' -%}alerts{%- elif t.startswith('FILE_') -%}files{%- elif t == 'INTEGRITY_SCAN' -%}scans{%- else -%}account{%- endif -%}
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 {%- endmacro %}
 
 {% block body %}

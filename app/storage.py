@@ -1,13 +1,18 @@
+<<<<<<< HEAD
 """Where the encrypted bytes live: local disk, or the database (Vercel).
 
 Every file has a primary copy and a backup copy (used for recovery).
 """
+=======
+"""Where the encrypted bytes live: local disk, or the database (Vercel)."""
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 
 from pathlib import Path
 
 from flask import current_app
 
 
+<<<<<<< HEAD
 def _root():
     return Path(current_app.root_path).parent / "storage"
 
@@ -16,6 +21,13 @@ def _disk_dir(kind="encrypted"):
     d = _root() / kind
     d.mkdir(parents=True, exist_ok=True)
     return d
+=======
+def _disk_dir():
+    project_root = Path(current_app.root_path).parent
+    storage_dir = project_root / "storage" / "encrypted"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    return storage_dir
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 
 
 def _use_db():
@@ -30,6 +42,7 @@ def _safe_name(record):
 
 
 def write_encrypted(record, data):
+<<<<<<< HEAD
     """Persist primary + backup copies for a (not yet committed) SecureFile."""
     if _use_db():
         record.encrypted_blob = data
@@ -44,6 +57,18 @@ def write_encrypted(record, data):
 
 def read_encrypted(record):
     """Return the primary encrypted bytes. Raises FileNotFoundError if missing."""
+=======
+    """Persist encrypted bytes for a (not yet committed) SecureFile."""
+    if _use_db():
+        record.encrypted_blob = data
+        return
+    with (_disk_dir() / _safe_name(record)).open("xb") as fh:
+        fh.write(data)
+
+
+def read_encrypted(record):
+    """Return the stored encrypted bytes. Raises FileNotFoundError if missing."""
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
     if _use_db():
         blob = record.encrypted_blob
         if blob is None:
@@ -52,6 +77,7 @@ def read_encrypted(record):
     return (_disk_dir() / _safe_name(record)).read_bytes()
 
 
+<<<<<<< HEAD
 def read_backup(record):
     """Return the backup bytes. Raises FileNotFoundError if there is none."""
     if _use_db():
@@ -80,3 +106,13 @@ def delete_encrypted(record):
             (_disk_dir(kind) / _safe_name(record)).unlink(missing_ok=True)
         except (OSError, ValueError):
             current_app.logger.exception("Could not delete encrypted file")
+=======
+def delete_encrypted(record):
+    if _use_db():
+        record.encrypted_blob = None
+        return
+    try:
+        (_disk_dir() / _safe_name(record)).unlink(missing_ok=True)
+    except (OSError, ValueError):
+        current_app.logger.exception("Could not delete encrypted file")
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230

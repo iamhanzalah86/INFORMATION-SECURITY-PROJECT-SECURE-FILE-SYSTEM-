@@ -12,12 +12,18 @@ from app import ON_VERCEL
 SUBJECTS = {
     "REGISTER": "Verify your email",
     "RESET": "Reset your password",
+<<<<<<< HEAD
     "RECOVER": "Confirm file recovery",
+=======
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 }
 INTRO = {
     "REGISTER": "Use this code to verify your email and finish creating your account.",
     "RESET": "Use this code to reset your password.",
+<<<<<<< HEAD
     "RECOVER": "Use this code to confirm restoring a tampered file from its backup.",
+=======
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 }
 
 

@@ -32,12 +32,16 @@ from app.crypto import decrypt_bytes, encrypt_bytes
 from app.integrity import verify_data_integrity
 from app.models import OtpCode, SecureFile, SecurityEvent, User, utcnow
 from app.otp import (
+<<<<<<< HEAD
     PURPOSE_RECOVER,
+=======
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
     PURPOSE_REGISTER,
     PURPOSE_RESET,
     issue_otp,
     verify_otp,
 )
+<<<<<<< HEAD
 from app.storage import (
     delete_encrypted,
     read_backup,
@@ -45,6 +49,9 @@ from app.storage import (
     replace_primary,
     write_encrypted,
 )
+=======
+from app.storage import delete_encrypted, read_encrypted, write_encrypted
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 
 main = Blueprint("main", __name__)
 
@@ -694,6 +701,7 @@ def download_file(file_id):
 
 
 # --------------------------------------------------
+<<<<<<< HEAD
 # RECOVER A TAMPERED FILE (password + emailed OTP)
 # --------------------------------------------------
 
@@ -824,6 +832,8 @@ def recover_verify(file_id):
 
 
 # --------------------------------------------------
+=======
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 # DELETE FILE
 # --------------------------------------------------
 

@@ -83,6 +83,7 @@ class FlowTest(unittest.TestCase):
         with self.app.app_context():
             self.assertIsNone(db.session.get(SecureFile, 1))
 
+<<<<<<< HEAD
     def test_recovery_needs_password_and_otp(self):
         self.register()
         self.c.post("/verify-email", data=dict(otp=self.codes[-1]))
@@ -130,6 +131,8 @@ class FlowTest(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(db.session.get(SecureFile, 1).status, "TAMPERED")
 
+=======
+>>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
     def test_reset_password(self):
         self.register()
         self.c.post("/verify-email", data=dict(otp=self.codes[-1]))
