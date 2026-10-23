@@ -1,0 +1,32 @@
+{% extends 'app_base.html' %}
+{% from '_macros.html' import icon, csrf %}
+{% set active = 'dashboard' %}
+{% block title %}Recover file{% endblock %}
+{% block body %}
+<div class="page-head"><div><h1>Recover file</h1><p>Restore a tampered file from its verified backup.</p></div>
+  <a class="btn" href="{{ url_for('main.dashboard') }}">&larr; Back</a></div>
+<div class="card card-pad" style="max-width:520px">
+  <div class="fname" style="margin-bottom:18px"><span class="ftype ico-bad">{{ icon('shield-alert') }}</span>
+    <div><b>{{ file.original_filename }}</b><small>Status: Tampered</small></div></div>
+
+  {% if step == 'password' %}
+    <p class="muted" style="margin-top:0"><b>Step 1 of 2.</b> Confirm it's you with your password. We'll then email a 6-digit code.</p>
+    <form method="POST" data-once>
+      {{ csrf() }}
+      <div class="field"><label for="password">Your password</label>
+        <div class="input-wrap">{{ icon('lock') }}
+          <input class="input has-toggle" id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+          <button class="toggle-pw" type="button" aria-label="Show password">{{ icon('eye') }}</button></div></div>
+      <button class="btn btn-primary btn-block" type="submit">Send code to my email {{ icon('arrow') }}</button>
+    </form>
+  {% else %}
+    <span class="mail-chip">{{ icon('mail') }} {{ masked_email }}</span>
+    <p class="muted" style="margin-top:0"><b>Step 2 of 2.</b> Enter the 6-digit code we emailed you.</p>
+    <form method="POST" data-once>
+      {{ csrf() }}
+      <div class="field"><input class="input otp-input" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="\d{6}" maxlength="6" placeholder="••••••" required aria-label="6-digit code"></div>
+      <button class="btn btn-primary btn-block" type="submit">Verify &amp; restore file {{ icon('check') }}</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

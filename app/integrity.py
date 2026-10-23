@@ -35,3 +35,10 @@ def verify_file_integrity(
         return False, "HASH_MISMATCH"
 
     return True, "OK"
+
+
+def verify_data_integrity(data: bytes, expected_hash: str) -> bool:
+    """Compare in-memory encrypted bytes with the stored SHA-256."""
+    if not expected_hash:
+        return False
+    return hmac.compare_digest(calculate_sha256(data), expected_hash)

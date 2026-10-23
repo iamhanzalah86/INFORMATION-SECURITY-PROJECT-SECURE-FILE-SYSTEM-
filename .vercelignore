@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+instance/
+storage/
+logs/
+tests/
+Dockerfile
+compose.yaml
+*.db
