@@ -89,12 +89,9 @@
           <td class="hide-sm muted">{{ time(f.uploaded_at, 'date') }}</td>
           <td>
             <div class="row-actions">
-<<<<<<< HEAD
               {% if f.status == 'TAMPERED' and f.has_backup %}
               <a class="btn btn-sm btn-primary" href="{{ url_for('main.recover_file', file_id=f.id) }}">{{ icon('shield') }} <span class="hide-sm">Recover</span></a>
               {% endif %}
-=======
->>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
               <a class="btn btn-sm" href="{{ url_for('main.download_file', file_id=f.id) }}">{{ icon('download') }} <span class="hide-sm">Download</span></a>
               <form method="POST" action="{{ url_for('main.delete_file', file_id=f.id) }}" data-confirm="Permanently delete '{{ f.original_filename|replace("'", "") }}'? This cannot be undone.">
                 {{ csrf() }}<button class="btn btn-sm btn-danger btn-icon" type="submit" aria-label="Delete {{ f.original_filename }}">{{ icon('trash') }}</button>
@@ -116,15 +113,9 @@
   {% if recent_events %}
   <ul class="feed">
     {% for e in recent_events %}
-<<<<<<< HEAD
       {% set bad = 'TAMPER' in e.event_type or e.event_type in ['LOGIN_FAILED','RECOVERY_FAILED'] %}
       <li>
         <div class="dot {{ 'ico-bad' if bad else 'ico-ok' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED','FILE_RECOVERED'] else 'ico-info' }}">{{ icon('alert' if bad else 'check' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED','FILE_RECOVERED'] else 'activity') }}</div>
-=======
-      {% set bad = 'TAMPER' in e.event_type or e.event_type == 'LOGIN_FAILED' %}
-      <li>
-        <div class="dot {{ 'ico-bad' if bad else 'ico-ok' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED'] else 'ico-info' }}">{{ icon('alert' if bad else 'check' if e.event_type in ['FILE_UPLOADED','ACCOUNT_VERIFIED'] else 'activity') }}</div>
->>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
         <div><b>{{ e.event_type.replace('_',' ').title() }}</b><small>{{ e.description }}</small><time>{{ time(e.timestamp) }}</time></div>
       </li>
     {% endfor %}

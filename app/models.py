@@ -44,13 +44,10 @@ class SecureFile(db.Model):
     # listing files never loads the blobs.
     encrypted_blob = db.deferred(db.Column(db.LargeBinary, nullable=True))
 
-<<<<<<< HEAD
     # Second encrypted copy used for password + OTP recovery.
     has_backup = db.Column(db.Boolean, nullable=False, default=False)
     backup_blob = db.deferred(db.Column(db.LargeBinary, nullable=True))
 
-=======
->>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
     security_events = db.relationship("SecurityEvent", backref="file", lazy=True)
 
 

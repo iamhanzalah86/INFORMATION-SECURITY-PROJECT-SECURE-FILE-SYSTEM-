@@ -14,10 +14,7 @@ from app.models import OtpCode, utcnow
 
 PURPOSE_REGISTER = "REGISTER"
 PURPOSE_RESET = "RESET"
-<<<<<<< HEAD
 PURPOSE_RECOVER = "RECOVER"
-=======
->>>>>>> a95b8c077877d22109b41fd7e821d111f0e3c230
 
 
 def _hash_code(email, purpose, code):
