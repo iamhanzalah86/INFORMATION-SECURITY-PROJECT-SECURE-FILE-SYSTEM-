@@ -1047,3 +1047,23 @@ td .avatar { width: 36px; height: 36px; border-radius: 12px; font-size: 14px; }
 .check-row .chk { margin-top: 3px; flex: none; }
 .check-row b { display: block; font-size: 14px; }
 .check-row small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+/* sizes and dates stay on one line in tables */
+td.hide-sm, td time { white-space: nowrap; }
+
+/* share links */
+.modal-card.share-card { max-height: calc(100vh - 40px); overflow-y: auto; }
+.share-form .select { flex: 1; min-width: 0; padding-top: 11px; padding-bottom: 11px; }
+.link-fresh { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; margin-top: 10px; animation: rise .35s var(--smooth) both; }
+.link-fresh .input { font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 10px 12px; }
+.link-fresh small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+.share-row .link-av { background: var(--brand-soft); color: var(--brand-ink); font-size: 15px; }
+.link-ico { margin: 0 0 16px; }
+.link-file { display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin-bottom: 18px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); }
+.link-file b { display: block; overflow-wrap: anywhere; }
+.link-file small { color: var(--muted); font-size: 12.5px; }
+
+/* share-link page: one centred panel, no side panel */
+.auth.auth-solo { grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: center; }
+.auth-solo .auth-main { width: min(620px, 100%); min-height: 0; padding-block: clamp(40px, 7vh, 72px); }
+.auth-solo .auth-brand { display: flex; }

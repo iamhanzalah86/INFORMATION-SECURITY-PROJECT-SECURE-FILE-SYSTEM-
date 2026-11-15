@@ -62,6 +62,28 @@ class SecureFile(db.Model):
     shares = db.relationship(
         "FileShare", backref="file", lazy=True, cascade="all, delete-orphan"
     )
+    links = db.relationship(
+        "ShareLink", backref="file", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class ShareLink(db.Model):
+    """A secret link that lets whoever opens it (after signing in) read one file.
+
+    Only the SHA-256 hash of the token is stored, so someone who reads the
+    database still cannot rebuild a working link.
+    """
+
+    __tablename__ = "share_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    file_id = db.Column(
+        db.Integer, db.ForeignKey("secure_files.id"), nullable=False, index=True
+    )
+    token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    uses = db.Column(db.Integer, nullable=False, default=0)
 
 
 class FileShare(db.Model):

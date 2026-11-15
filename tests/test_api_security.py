@@ -188,6 +188,56 @@ class ApiSecurityTest(_ApiCase):
         self.assertEqual(owner.delete(f"/api/files/{file_id}").status_code, 200)
         self.assertEqual(stranger.get("/api/shared").get_json()["shared"], [])
 
+    def test_share_link_gives_read_only_access_after_sign_in(self):
+        from datetime import timedelta
+        from io import BytesIO
+
+        from app import db
+        from app.models import ShareLink, utcnow
+
+        owner, friend, late = self.signup("alice"), self.signup("bob"), self.signup("eve")
+        self.signin(owner, "alice")
+        r = owner.post("/api/upload", data={"file": (BytesIO(b"by link"), "notes.txt")},
+                       content_type="multipart/form-data")
+        file_id = r.get_json()["file"]["id"]
+
+        r = owner.post(f"/api/files/{file_id}/links", json=dict(days=7))
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        token, link_id = r.get_json()["token"], r.get_json()["link"]["id"]
+        self.assertEqual(owner.post(f"/api/files/{file_id}/links", json=dict(days=365)).status_code, 400)
+
+        # the token itself is never stored
+        with self.app.app_context():
+            self.assertNotIn(token, [x.token_hash for x in db.session.query(ShareLink).all()])
+
+        # a visitor can see what the link is, but must sign in to use it
+        guest = self.app.test_client()
+        self.assertEqual(guest.get(f"/api/share-links/{token}").get_json()["filename"], "notes.txt")
+        self.assertEqual(guest.post(f"/api/share-links/{token}/claim").status_code, 401)
+        self.assertEqual(guest.get("/api/share-links/" + "x" * 43).status_code, 404)
+
+        self.signin(friend, "bob")
+        self.assertEqual(friend.post(f"/api/share-links/{token}/claim").status_code, 200)
+        self.assertEqual(friend.post(f"/api/share-links/{token}/claim").status_code, 200)  # idempotent
+        shared = friend.get("/api/shared").get_json()["shared"]
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(friend.get(f"/api/shared/{shared[0]['share_id']}/download").data, b"by link")
+        self.assertEqual(friend.delete(f"/api/files/{file_id}").status_code, 404)  # still read-only
+        self.assertEqual(owner.get(f"/api/files/{file_id}/links").get_json()["links"][0]["uses"], 1)
+
+        # an expired or revoked link stops working for new people
+        with self.app.app_context():
+            link = db.session.get(ShareLink, link_id)
+            link.expires_at = utcnow() - timedelta(minutes=1)
+            db.session.commit()
+        self.signin(late, "eve")
+        self.assertEqual(late.post(f"/api/share-links/{token}/claim").status_code, 404)
+
+        r = owner.post(f"/api/files/{file_id}/links", json=dict(days=1))
+        token2, link2 = r.get_json()["token"], r.get_json()["link"]["id"]
+        self.assertEqual(owner.delete(f"/api/files/{file_id}/links/{link2}").status_code, 200)
+        self.assertEqual(late.post(f"/api/share-links/{token2}/claim").status_code, 404)
+
     def test_disabled_account_is_signed_out_and_cannot_log_in(self):
         admin, bob = self.signup("alice"), self.signup("bob")
         self.signin(admin, "alice")

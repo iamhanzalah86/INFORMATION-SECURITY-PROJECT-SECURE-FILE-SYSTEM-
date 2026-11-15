@@ -89,6 +89,11 @@ export const api = {
   listShares: (id) => get(`/api/files/${id}/shares`),
   shareFile: (id, user) => post(`/api/files/${id}/shares`, { user }),
   revokeShare: (id, shareId) => request('DELETE', `/api/files/${id}/shares/${shareId}`),
+  listLinks: (id) => get(`/api/files/${id}/links`),
+  createLink: (id, days) => post(`/api/files/${id}/links`, { days }),
+  revokeLink: (id, linkId) => request('DELETE', `/api/files/${id}/links/${linkId}`),
+  linkInfo: (token) => get(`/api/share-links/${token}`),
+  claimLink: (token) => post(`/api/share-links/${token}/claim`),
   leaveShare: (shareId) => request('DELETE', `/api/shared/${shareId}`),
   downloadShared(shareId, fallbackName) { return this.saveFrom(`/api/shared/${shareId}/download`, fallbackName); },
 

@@ -9,6 +9,7 @@ GET /api/csrf and sends it back in the X-CSRFToken header.
 import hashlib
 import hmac
 import os
+import secrets
 import uuid
 from datetime import timedelta
 from functools import wraps
@@ -25,7 +26,7 @@ from app import db
 from app.auth import hash_password, verify_password
 from app.crypto import decrypt_bytes, encrypt_bytes
 from app.integrity import verify_data_integrity
-from app.models import FileShare, SecureFile, SecurityEvent, User, utcnow
+from app.models import FileShare, SecureFile, SecurityEvent, ShareLink, User, utcnow
 from app.otp import (
     PURPOSE_LOGIN,
     PURPOSE_RECOVER,
@@ -1031,6 +1032,161 @@ def leave_share(share_id):
     db.session.delete(share)
     db.session.commit()
     return jsonify(message=f"'{name}' was removed from your shared files.")
+
+
+# --------------------------------------------------
+# share links: anyone who opens the link and signs in gets read-only access
+# --------------------------------------------------
+LINK_DAYS = (1, 7, 30)
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _link_json(link):
+    return {
+        "id": link.id,
+        "created_at": iso(link.created_at),
+        "expires_at": iso(link.expires_at),
+        "uses": link.uses,
+    }
+
+
+def _live_link(token):
+    """The link for this token if it exists and has not expired, else None."""
+    token = str(token or "")
+    if not 20 <= len(token) <= 200:
+        return None
+    link = db.session.scalar(
+        select(ShareLink).where(ShareLink.token_hash == _token_hash(token))
+    )
+    if link is None or link.expires_at <= utcnow():
+        return None
+    return link
+
+
+@api.get("/files/<int:file_id>/links")
+@login_required_api
+def list_links(file_id):
+    record = own_file(file_id)
+    if record is None:
+        return err("File not found.", 404)
+    now = utcnow()
+    return jsonify(links=[_link_json(x) for x in record.links if x.expires_at > now])
+
+
+@api.post("/files/<int:file_id>/links")
+@login_required_api
+def create_link(file_id):
+    record = own_file(file_id)  # only the owner can create a link
+    if record is None:
+        return err("File not found.", 404)
+    if record.status == "TAMPERED":
+        return err("Recover this file before sharing it.", 409)
+
+    try:
+        days = int(body().get("days", 7))
+    except (TypeError, ValueError):
+        days = 0
+    if days not in LINK_DAYS:
+        return err("Choose 1, 7 or 30 days.")
+
+    token = secrets.token_urlsafe(32)  # 256 bits of randomness; shown to the owner once
+    link = ShareLink(
+        file_id=record.id,
+        token_hash=_token_hash(token),
+        expires_at=utcnow() + timedelta(days=days),
+    )
+    db.session.add(link)
+    log_event(
+        "FILE_LINK_CREATED",
+        f"A read-only share link for {record.original_filename} was created "
+        f"(valid {days} day{'s' if days != 1 else ''}).",
+        user_id=current_user.id,
+        file_id=record.id,
+    )
+    db.session.commit()
+    return jsonify(
+        message="Link created. Copy it now; it is shown only once.",
+        token=token,
+        link=_link_json(link),
+    )
+
+
+@api.delete("/files/<int:file_id>/links/<int:link_id>")
+@login_required_api
+def revoke_link(file_id, link_id):
+    record = own_file(file_id)
+    if record is None:
+        return err("File not found.", 404)
+    link = db.session.scalar(
+        select(ShareLink).where(ShareLink.id == link_id, ShareLink.file_id == record.id)
+    )
+    if link is None:
+        return err("Link not found.", 404)
+    log_event(
+        "FILE_LINK_REVOKED",
+        f"A share link for {record.original_filename} was turned off.",
+        user_id=current_user.id,
+        file_id=record.id,
+    )
+    db.session.delete(link)
+    db.session.commit()
+    return jsonify(message="Link turned off. People who already opened it keep access until you remove them.")
+
+
+@api.get("/share-links/<token>")
+def link_info(token):
+    """Public: what a link points to, so the page can invite a visitor to sign in."""
+    link = _live_link(token)
+    if link is None:
+        return err("This link is not valid any more.", 404)
+    return jsonify(
+        filename=link.file.original_filename,
+        owner=link.file.owner.username,
+        expires_at=iso(link.expires_at),
+    )
+
+
+@api.post("/share-links/<token>/claim")
+@login_required_api
+def claim_link(token):
+    link = _live_link(token)
+    if link is None:
+        return err("This link is not valid any more.", 404)
+
+    record = link.file
+    if record.user_id == current_user.id:
+        return jsonify(message="This is your own file.", own=True)
+
+    already = db.session.scalar(
+        select(FileShare).where(
+            FileShare.file_id == record.id, FileShare.recipient_id == current_user.id
+        )
+    )
+    if already is None:
+        db.session.add(FileShare(file_id=record.id, recipient_id=current_user.id))
+        link.uses += 1
+        log_event(
+            "FILE_LINK_USED",
+            f"{current_user.username} opened your share link for "
+            f"{record.original_filename} and now has read-only access.",
+            user_id=record.user_id,
+            file_id=record.id,
+        )
+        log_event(
+            "FILE_RECEIVED",
+            f"You opened a share link from {record.owner.username} for "
+            f"{record.original_filename}.",
+            user_id=current_user.id,
+            file_id=record.id,
+        )
+        db.session.commit()
+    return jsonify(
+        message=f"'{record.original_filename}' from {record.owner.username} is now "
+        f"in your shared files (read-only)."
+    )
 
 
 # --------------------------------------------------

@@ -6,6 +6,7 @@ import { Glider, useGlider } from '../components/Glider';
 import { useAuth, useFlash } from '../context';
 import { useTitle } from '../hooks';
 import { api } from '../api';
+import { pendingLinkPath } from '../pendingLink';
 
 const PORTALS = [['user', 'User login', 'user'], ['admin', 'Admin login', 'key']];
 
@@ -42,7 +43,7 @@ export default function Login() {
         return;
       }
       signIn(res.user);
-      navigate(isAdmin ? '/admin' : location.state?.from?.pathname || '/dashboard', { replace: true });
+      navigate(pendingLinkPath() || (isAdmin ? '/admin' : location.state?.from?.pathname || '/dashboard'), { replace: true });
     } catch (err) {
       flash(err.message, 'error');
       setBusy(false);

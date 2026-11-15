@@ -11,6 +11,8 @@ import Dashboard from './pages/Dashboard';
 import Recover from './pages/Recover';
 import SecurityEvents from './pages/SecurityEvents';
 import Admin from './pages/Admin';
+import OpenLink from './pages/OpenLink';
+import { pendingLinkPath } from './pendingLink';
 import { useAuth } from './context';
 
 function ScrollTop() {
@@ -31,7 +33,8 @@ function ScrollTop() {
 
 function GuestOnly({ children }) {
   const { user } = useAuth();
-  return user ? <Navigate to="/dashboard" replace /> : children;
+  // someone who arrived through a share link goes back to it once signed in
+  return user ? <Navigate to={pendingLinkPath() || '/dashboard'} replace /> : children;
 }
 
 export default function App() {
@@ -50,6 +53,11 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyOtp mode="register" />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<VerifyOtp mode="reset" />} />
+        </Route>
+
+        {/* share links work for visitors and signed-in users alike */}
+        <Route element={<AuthLayout solo />}>
+          <Route path="/s/:token" element={<OpenLink />} />
         </Route>
 
         <Route element={<AppLayout />}>

@@ -133,7 +133,7 @@ def create_app():
     login_manager.login_message_category = "info"
 
     from app.models import (  # noqa: F401
-        FileShare, OtpCode, SecureFile, SecurityEvent, User,
+        FileShare, OtpCode, SecureFile, SecurityEvent, ShareLink, User,
     )
 
     @login_manager.user_loader

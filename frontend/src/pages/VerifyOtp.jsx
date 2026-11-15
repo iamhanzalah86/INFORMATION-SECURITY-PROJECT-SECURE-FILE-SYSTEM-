@@ -7,6 +7,7 @@ import ResendButton from '../components/ResendButton';
 import { useAuth, useFlash } from '../context';
 import { useTitle } from '../hooks';
 import { api } from '../api';
+import { pendingLinkPath } from '../pendingLink';
 
 // mode="register" (verify email), mode="reset" (reset password) or mode="login" (second sign-in step)
 const TEXT = {
@@ -55,7 +56,7 @@ export default function VerifyOtp({ mode }) {
       if (isLogin) {
         const res = await api.loginVerify({ otp, remember });
         signIn(res.user);
-        navigate(location.state?.portal === 'admin' ? '/admin' : location.state?.from?.pathname || '/dashboard', { replace: true });
+        navigate(pendingLinkPath() || (location.state?.portal === 'admin' ? '/admin' : location.state?.from?.pathname || '/dashboard'), { replace: true });
       } else if (isRegister) {
         const res = await api.verifyEmail({ otp });
         flash(res.message, 'success');

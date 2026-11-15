@@ -10,10 +10,17 @@ export default function ShareModal({ file, onClose, onChanged }) {
   const [who, setWho] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null); // { text, bad }
+  const [links, setLinks] = useState([]);
+  const [days, setDays] = useState(7);
+  const [fresh, setFresh] = useState(null); // full URL of the link just created (shown once)
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef(null);
 
   const load = useCallback(async () => {
-    try { setShares((await api.listShares(file.id)).shares); }
+    try {
+      setShares((await api.listShares(file.id)).shares);
+      setLinks((await api.listLinks(file.id)).links);
+    }
     catch (err) { setShares([]); setNote({ text: err.message, bad: true }); }
   }, [file.id]);
 
@@ -46,6 +53,23 @@ export default function ShareModal({ file, onClose, onChanged }) {
     run(async () => { const res = await api.shareFile(file.id, value); setWho(''); return res; });
   };
 
+  const makeLink = () => run(async () => {
+    const res = await api.createLink(file.id, days);
+    setFresh(`${window.location.origin}/s/${res.token}`);
+    setCopied(false);
+    return res;
+  });
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(fresh); setCopied(true); }
+    catch (e) { setNote({ text: 'Select the link and copy it manually.', bad: true }); }
+  };
+
+  const expiresIn = (iso) => {
+    const hrs = Math.max(0, (new Date(iso.endsWith('Z') ? iso : `${iso}Z`).getTime() - Date.now()) / 3600000);
+    return hrs < 24 ? `${Math.max(1, Math.round(hrs))} hr` : `${Math.round(hrs / 24)} day${Math.round(hrs / 24) === 1 ? '' : 's'}`;
+  };
+
   return createPortal(
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="card modal-card share-card" role="dialog" aria-modal="true" aria-labelledby="share-title">
@@ -60,6 +84,32 @@ export default function ShareModal({ file, onClose, onChanged }) {
           <button className="btn btn-primary" type="submit" disabled={busy || !who.trim()}><Icon name="share" /> Share</button>
         </form>
         {note && <div className={`share-note${note.bad ? ' bad' : ''}`} role="status">{note.text}</div>}
+
+        <div className="share-list">
+          <div className="share-list-head">Share with a link</div>
+          <div className="share-form">
+            <select className="select" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Link expiry">
+              <option value={1}>Expires in 1 day</option>
+              <option value={7}>Expires in 7 days</option>
+              <option value={30}>Expires in 30 days</option>
+            </select>
+            <button type="button" className="btn" disabled={busy} onClick={makeLink}><Icon name="share" /> Create link</button>
+          </div>
+          {fresh && (
+            <div className="link-fresh">
+              <input className="input" readOnly value={fresh} aria-label="Share link" onFocus={(e) => e.target.select()} />
+              <button type="button" className="btn btn-primary" onClick={copy}><Icon name={copied ? 'check' : 'copy'} /> {copied ? 'Copied' : 'Copy'}</button>
+              <small>Anyone with this link can read the file after signing in. Copy it now: it is shown only once.</small>
+            </div>
+          )}
+          {links.map((l) => (
+            <div key={l.id} className="share-row">
+              <span className="avatar link-av"><Icon name="share" /></span>
+              <div className="grow"><b>Link · expires in {expiresIn(l.expires_at)}</b><small>Created {timeAgo(l.created_at)} · opened by {l.uses}</small></div>
+              <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => run(() => api.revokeLink(file.id, l.id))}>Turn off</button>
+            </div>
+          ))}
+        </div>
 
         <div className="share-list">
           <div className="share-list-head">People with access</div>
