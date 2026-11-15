@@ -6,6 +6,7 @@ from unittest import mock
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("AES_KEY_B64", "F2rA60cDlTgz4IStKhqszRY1OHLYlFdDDvrjEkXs88g=")
+os.environ["LEGACY_UI"] = "1"
 os.environ["DATABASE_URL"] = ""
 os.environ["STORAGE_BACKEND"] = "db"
 

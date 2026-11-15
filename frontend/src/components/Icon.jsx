@@ -1,0 +1,44 @@
+// Icon paths ported 1:1 from templates/_macros.html
+const PATHS = {
+  "shield": "<path d=\"M12 3l8 3v6c0 4.5-3.3 8.3-8 9-4.7-.7-8-4.5-8-9V6l8-3z\"/><path d=\"M9 12l2 2 4-4\"/>",
+  "shield-alert": "<path d=\"M12 3l8 3v6c0 4.5-3.3 8.3-8 9-4.7-.7-8-4.5-8-9V6l8-3z\"/><path d=\"M12 8v4M12 16h.01\"/>",
+  "lock": "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/><path d=\"M8 11V7a4 4 0 018 0v4\"/>",
+  "grid": "<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/>",
+  "activity": "<path d=\"M3 12h4l3-8 4 16 3-8h4\"/>",
+  "upload": "<path d=\"M12 16V4M7 9l5-5 5 5\"/><path d=\"M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3\"/>",
+  "download": "<path d=\"M12 4v12M7 11l5 5 5-5\"/><path d=\"M4 20h16\"/>",
+  "trash": "<path d=\"M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3\"/>",
+  "file": "<path d=\"M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z\"/><path d=\"M14 3v5h5\"/>",
+  "scan": "<path d=\"M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2\"/><path d=\"M4 12h16\"/>",
+  "logout": "<path d=\"M9 21H6a2 2 0 01-2-2V5a2 2 0 012-2h3M16 17l5-5-5-5M21 12H9\"/>",
+  "mail": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M3 7l9 6 9-6\"/>",
+  "user": "<circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4 21a8 8 0 0116 0\"/>",
+  "key": "<circle cx=\"8\" cy=\"15\" r=\"4\"/><path d=\"M11 12l9-9M16 7l3 3M14 9l2 2\"/>",
+  "check": "<path d=\"M5 12l5 5 9-10\"/>",
+  "alert": "<path d=\"M12 3l10 18H2L12 3z\"/><path d=\"M12 10v5M12 18h.01\"/>",
+  "info": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v6M12 7.5h.01\"/>",
+  "x": "<path d=\"M6 6l12 12M18 6L6 18\"/>",
+  "menu": "<path d=\"M4 7h16M4 12h16M4 17h16\"/>",
+  "sun": "<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4\"/>",
+  "moon": "<path d=\"M21 13A9 9 0 1111 3a7 7 0 0010 10z\"/>",
+  "eye": "<path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>",
+  "search": "<circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"M20 20l-4-4\"/>",
+  "database": "<ellipse cx=\"12\" cy=\"5\" rx=\"8\" ry=\"3\"/><path d=\"M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3\"/>",
+  "hash": "<path d=\"M5 9h14M5 15h14M10 3L8 21M16 3l-2 18\"/>",
+  "clock": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/>",
+  "arrow": "<path d=\"M5 12h14M13 6l6 6-6 6\"/>",
+  "folder": "<path d=\"M3 7a2 2 0 012-2h4l2 3h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z\"/>",
+  "copy": "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V6a2 2 0 012-2h9\"/>",
+  "chevron": "<path d=\"M6 9l6 6 6-6\"/>"
+};
+
+export default function Icon({ name }) {
+  return (
+    <svg
+      className="icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: PATHS[name] }}
+    />
+  );
+}

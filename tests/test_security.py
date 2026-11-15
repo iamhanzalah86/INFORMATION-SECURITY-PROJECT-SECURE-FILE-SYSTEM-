@@ -1,6 +1,9 @@
 
 import unittest
 
+import os
+os.environ["LEGACY_UI"] = "1"
+
 from app import create_app
 
 

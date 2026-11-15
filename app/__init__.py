@@ -123,8 +123,18 @@ def create_app():
         except (ValueError, TypeError):
             return None
 
-    from app.routes import main
-    app.register_blueprint(main)
+    # JSON API used by the React frontend (frontend/).
+    from app.api import api
+    app.register_blueprint(api)
+
+    if os.environ.get("LEGACY_UI", "0").strip() == "1":
+        # Original server-rendered Jinja pages (kept for reference / tests).
+        from app.routes import main
+        app.register_blueprint(main)
+    else:
+        # React app built into frontend/dist.
+        from app.spa import spa
+        app.register_blueprint(spa)
 
     @app.after_request
     def security_headers(response):
