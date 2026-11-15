@@ -1,30 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
 import OtpInput from '../components/OtpInput';
 import PasswordInput from '../components/PasswordInput';
 import ResendButton from '../components/ResendButton';
-import { useFlash } from '../context';
+import { useAuth, useFlash } from '../context';
 import { useTitle } from '../hooks';
 import { api } from '../api';
 
-// Ported from verify_otp.html — mode="register" (verify email) or mode="reset" (reset password)
+// mode="register" (verify email), mode="reset" (reset password) or mode="login" (second sign-in step)
+const TEXT = {
+  register: { title: 'Verify email', heading: 'Verify your email', button: 'Verify & continue' },
+  reset: { title: 'Reset password', heading: 'Reset your password', button: 'Update password' },
+  login: { title: 'Confirm sign-in', heading: 'Two-step verification', button: 'Verify & sign in' },
+};
+
 export default function VerifyOtp({ mode }) {
   const isRegister = mode === 'register';
-  useTitle(isRegister ? 'Verify email' : 'Reset password');
+  const isLogin = mode === 'login';
+  const codeOnly = isRegister || isLogin; // only the reset form has extra fields
+  const text = TEXT[mode];
+  useTitle(text.title);
   const { flash, clear } = useFlash();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [info, setInfo] = useState(null); // { masked_email, ttl } from the server session
 
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
+  const [remember, setRemember] = useState(false); // login mode: skip the code on this device next time
   const formRef = useRef(null);
 
   // The server remembers which email this flow belongs to (session cookie).
   useEffect(() => {
-    (isRegister ? api.verifyStatus() : api.resetStatus())
+    (isLogin ? api.loginVerifyStatus() : isRegister ? api.verifyStatus() : api.resetStatus())
       .then(setInfo)
       .catch((err) => {
         const goto = err.data && err.data.goto;
@@ -32,7 +44,7 @@ export default function VerifyOtp({ mode }) {
         navigate(goto === 'login' ? '/login' : isRegister ? '/register' : '/forgot-password', { replace: true });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRegister]);
+  }, [mode]);
 
   const submit = async (e) => {
     e && e.preventDefault();
@@ -40,7 +52,11 @@ export default function VerifyOtp({ mode }) {
     setBusy(true);
     clear();
     try {
-      if (isRegister) {
+      if (isLogin) {
+        const res = await api.loginVerify({ otp, remember });
+        signIn(res.user);
+        navigate(location.state?.portal === 'admin' ? '/admin' : location.state?.from?.pathname || '/dashboard', { replace: true });
+      } else if (isRegister) {
         const res = await api.verifyEmail({ otp });
         flash(res.message, 'success');
         navigate('/login');
@@ -51,7 +67,9 @@ export default function VerifyOtp({ mode }) {
       }
     } catch (err) {
       flash(err.message, 'error');
-      if (err.data && err.data.goto) navigate(err.data.goto === 'forgot' ? '/forgot-password' : '/register');
+      const goto = err.data && err.data.goto;
+      if (goto) navigate(goto === 'forgot' ? '/forgot-password' : goto === 'login' ? '/login' : '/register');
+      setOtp('');
       setBusy(false);
     }
   };
@@ -59,8 +77,8 @@ export default function VerifyOtp({ mode }) {
   const resend = async () => {
     clear();
     try {
-      const res = await (isRegister ? api.verifyResend() : api.resetResend());
-      flash(res.message, res.ok === false ? 'error' : isRegister ? 'success' : 'info');
+      const res = await (isLogin ? api.loginResend() : isRegister ? api.verifyResend() : api.resetResend());
+      flash(res.message, res.ok === false ? 'error' : codeOnly ? 'success' : 'info');
     } catch (err) {
       flash(err.message, 'error');
     }
@@ -71,18 +89,24 @@ export default function VerifyOtp({ mode }) {
   return (
     <>
       <span className="mail-chip"><Icon name="mail" /> {info.masked_email}</span>
-      <h1>{isRegister ? 'Verify your email' : 'Reset your password'}</h1>
-      <p className="sub">Enter the 6-digit code we sent. It expires in {info.ttl} minutes.</p>
+      <h1>{text.heading}</h1>
+      <p className="sub">{isLogin ? 'Your password was correct. ' : ''}Enter the 6-digit code we sent. It expires in {info.ttl} minutes.</p>
       <form ref={formRef} onSubmit={submit}>
+        {isLogin && (
+          <label className="check-row">
+            <input type="checkbox" className="chk" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <span><b>Remember this device for 30 days</b><small>Next time only your password is needed here. Don't use on a shared computer.</small></span>
+          </label>
+        )}
         <div className="field">
           <OtpInput
             value={otp}
             onChange={setOtp}
-            onComplete={isRegister ? () => setTimeout(() => formRef.current && formRef.current.requestSubmit(), 0) : undefined}
-            autoFocus={isRegister}
+            onComplete={codeOnly ? () => setTimeout(() => formRef.current && formRef.current.requestSubmit(), 0) : undefined}
+            autoFocus={codeOnly}
           />
         </div>
-        {!isRegister && (
+        {!codeOnly && (
           <>
             <div className="field">
               <label htmlFor="password">New password</label>
@@ -96,7 +120,7 @@ export default function VerifyOtp({ mode }) {
           </>
         )}
         <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
-          {isRegister ? 'Verify & continue' : 'Update password'} <Icon name="check" />
+          {text.button} <Icon name="check" />
         </button>
       </form>
       <div style={{ marginTop: 12 }}>

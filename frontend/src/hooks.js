@@ -13,13 +13,17 @@ export function useTheme() {
   const toggle = useCallback(() => {
     const root = document.documentElement;
     const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
+    const apply = () => root.setAttribute('data-theme', next);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // cross-fade the whole page between themes where the browser supports it
+    if (document.startViewTransition && !reduced) document.startViewTransition(apply);
+    else apply();
     try { localStorage.setItem('theme', next); } catch (e) {}
   }, []);
   return toggle;
 }
 
-/** Adds/removes a class on <body> (landing-page, menu-open). */
+/** Adds/removes a class on <body> (landing-page). */
 export function useBodyClass(name, on = true) {
   useEffect(() => {
     if (!name) return undefined;
@@ -95,9 +99,9 @@ export function fileTypeBadge(name) {
 
 /** "FILE_UPLOADED" -> "File Uploaded" (Jinja: replace('_',' ')|title) */
 export const eventTitle = (t) =>
-  t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Mfa\b/, 'MFA');
 
-export const isBadEvent = (t) => t.includes('TAMPER') || ['LOGIN_FAILED', 'RECOVERY_FAILED'].includes(t);
+export const isBadEvent = (t) => t.includes('TAMPER') || ['LOGIN_FAILED', 'RECOVERY_FAILED', 'MFA_FAILED', 'ACCESS_DENIED', 'ACCOUNT_DISABLED'].includes(t);
 export const isOkEvent = (t) => ['FILE_UPLOADED', 'ACCOUNT_VERIFIED', 'FILE_RECOVERED'].includes(t);
 
 /** Category used by the Security events filter pills. */
@@ -128,6 +132,10 @@ const EVENT_VISUALS = {
   FILE_DOWNLOADED: ['download', 'ico-info'],
   FILE_DELETED: ['trash', 'ico-warn'],
   FILE_RECOVERED: ['shield', 'ico-ok'],
+  FILE_SHARED: ['share', 'ico-info'],
+  FILE_RECEIVED: ['share', 'ico-ok'],
+  FILE_SHARE_REVOKED: ['lock', 'ico-warn'],
+  FILE_SHARE_DOWNLOADED: ['download', 'ico-info'],
   FILE_TAMPERING_DETECTED: ['shield-alert', 'ico-bad'],
   DEMO_TAMPER: ['shield-alert', 'ico-bad'],
   INTEGRITY_SCAN: ['scan', 'ico-info'],
@@ -138,6 +146,12 @@ const EVENT_VISUALS = {
   PASSWORD_RESET_REQUESTED: ['mail', 'ico-info'],
   PASSWORD_RESET: ['lock', 'ico-ok'],
   RECOVERY_FAILED: ['alert', 'ico-bad'],
+  MFA_FAILED: ['key', 'ico-bad'],
+  DEVICE_TRUSTED: ['key', 'ico-info'],
+  ACCESS_DENIED: ['lock', 'ico-bad'],
+  ROLE_CHANGED: ['users', 'ico-info'],
+  ACCOUNT_DISABLED: ['user', 'ico-bad'],
+  ACCOUNT_ENABLED: ['user', 'ico-ok'],
 };
 
 /** Icon + colour tone for each kind of security event. */

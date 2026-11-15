@@ -59,5 +59,68 @@ class TestAESGCM(unittest.TestCase):
             ).decode("ascii")
 
 
+class TestEnvelopeEncryption(unittest.TestCase):
+    """Per-file data keys wrapped by the master key, and key rotation."""
+
+    def _with_keys(self, current, old=None):
+        import os
+        from unittest import mock
+
+        env = {"AES_KEY_B64": current, "AES_KEY_OLD_B64": old or ""}
+        patcher = mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return patcher
+
+    @staticmethod
+    def _new_key():
+        import base64
+        import os
+
+        return base64.b64encode(os.urandom(32)).decode("ascii")
+
+    def test_files_written_before_envelope_encryption_still_open(self):
+        import os
+
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        from app.crypto import load_aes_key
+
+        nonce = os.urandom(12)
+        legacy = nonce + AESGCM(load_aes_key()).encrypt(nonce, b"old file", None)
+
+        self.assertEqual(decrypt_bytes(legacy), b"old file")
+
+    def test_key_header_cannot_be_moved_to_another_file(self):
+        from app.crypto import WRAP_LEN
+
+        first = encrypt_bytes(b"A" * 40)
+        second = encrypt_bytes(b"B" * 40)
+
+        with self.assertRaises(ValueError):
+            decrypt_bytes(first[:WRAP_LEN] + second[WRAP_LEN:])
+
+    def test_rotation_keeps_old_files_readable(self):
+        from app.crypto import rewrap_bytes
+
+        old_key, new_key = self._new_key(), self._new_key()
+
+        first = self._with_keys(old_key)
+        encrypted = encrypt_bytes(b"written with the old key")
+        first.stop()
+
+        second = self._with_keys(new_key)  # rotated, old key forgotten
+        with self.assertRaises(ValueError):
+            decrypt_bytes(encrypted)
+        second.stop()
+
+        self._with_keys(new_key, old=old_key)  # rotated, old key kept for reading
+        self.assertEqual(decrypt_bytes(encrypted), b"written with the old key")
+
+        rewrapped = rewrap_bytes(encrypted)
+        self._with_keys(new_key)  # after re-wrapping the old key is not needed
+        self.assertEqual(decrypt_bytes(rewrapped), b"written with the old key")
+
+
 if __name__ == "__main__":
     unittest.main()

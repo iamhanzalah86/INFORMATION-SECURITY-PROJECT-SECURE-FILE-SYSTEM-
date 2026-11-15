@@ -1,4 +1,3 @@
-# Python
 .venv/
 venv/
 __pycache__/
@@ -6,22 +5,16 @@ __pycache__/
 .pytest_cache/
 .vercel/
 
-# Secrets (keys, SMTP password)
+# Secrets
 .env
 instance/
 
-# Local data: database, encrypted files and their backup copies
+# Local data
 *.db
-storage/
+storage/encrypted/*
+!storage/encrypted/.gitkeep
 logs/*
 !logs/.gitkeep
-
-# Frontend: installed packages and build output
+storage/backup/
 node_modules/
 frontend/dist/
-
-# Editor / OS clutter
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db

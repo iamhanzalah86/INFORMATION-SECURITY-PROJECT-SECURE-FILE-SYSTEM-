@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, redirect, request
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
@@ -53,7 +53,9 @@ def create_app():
             "(or in the Vercel environment variables)."
         )
 
-    default_secure = "true" if ON_VERCEL else "false"
+    # HTTPS=1 makes `python run.py` serve over TLS with a self-signed certificate.
+    local_https = os.environ.get("HTTPS", "0").strip() == "1"
+    default_secure = "true" if (ON_VERCEL or local_https) else "false"
     secure_cookie = os.environ.get(
         "SESSION_COOKIE_SECURE", default_secure
     ).strip().lower()
@@ -76,6 +78,22 @@ def create_app():
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_SECURE"] = secure_cookie == "true"
     app.config["WTF_CSRF_TIME_LIMIT"] = 3600
+
+    # Redirect plain HTTP to HTTPS (on by default when deployed or with HTTPS=1).
+    force_https = os.environ.get(
+        "FORCE_HTTPS", "1" if (ON_VERCEL or local_https) else "0"
+    ).strip() == "1"
+    app.config["FORCE_HTTPS"] = force_https
+
+    # Second factor at sign-in: password, then a 6-digit emailed code.
+    app.config["LOGIN_MFA"] = os.environ.get("LOGIN_MFA", "1").strip() != "0"
+
+    # Accounts with these emails become administrators (comma separated).
+    app.config["ADMIN_EMAILS"] = {
+        e.strip().lower()
+        for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+        if e.strip()
+    }
 
     # ---- Email / OTP configuration ---------------------------------
     app.config["SMTP_HOST"] = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -114,14 +132,20 @@ def create_app():
     login_manager.login_message = "Please log in to access this page."
     login_manager.login_message_category = "info"
 
-    from app.models import User, SecureFile, SecurityEvent, OtpCode  # noqa: F401
+    from app.models import (  # noqa: F401
+        FileShare, OtpCode, SecureFile, SecurityEvent, User,
+    )
 
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return db.session.get(User, int(user_id))
+            user = db.session.get(User, int(user_id))
         except (ValueError, TypeError):
             return None
+        # A disabled account is signed out on its very next request.
+        if user is not None and user.disabled:
+            return None
+        return user
 
     # JSON API used by the React frontend (frontend/).
     from app.api import api
@@ -136,11 +160,41 @@ def create_app():
         from app.spa import spa
         app.register_blueprint(spa)
 
+    legacy_ui = os.environ.get("LEGACY_UI", "0").strip() == "1"
+
+    def _is_https():
+        # Behind a proxy (Vercel, nginx) the original scheme is in this header.
+        forwarded = request.headers.get("X-Forwarded-Proto", "")
+        return request.is_secure or forwarded.split(",")[0].strip() == "https"
+
+    @app.before_request
+    def enforce_https():
+        if app.config["FORCE_HTTPS"] and not _is_https() and request.path != "/healthz":
+            return redirect(request.url.replace("http://", "https://", 1), code=308)
+        return None
+
     @app.after_request
     def security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        if _is_https():
+            # Browsers remember to use HTTPS only for this site for one year.
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        if not legacy_ui:
+            # Only our own scripts, styles and API may load; no framing, no plugins.
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+                "font-src 'self' data:; connect-src 'self'; object-src 'none'; "
+                "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            )
         # Authenticated pages must not be cached by the browser.
         if "Cache-Control" not in response.headers and not (
             response.mimetype in ("text/css", "application/javascript", "text/javascript")
@@ -152,6 +206,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _add_missing_columns()
+        _promote_admins(app)
 
     return app
 
@@ -161,17 +216,65 @@ def _add_missing_columns():
     from sqlalchemy import inspect, text
 
     insp = inspect(db.engine)
-    if "secure_files" not in insp.get_table_names():
-        return
-
-    existing = {c["name"] for c in insp.get_columns("secure_files")}
+    tables = set(insp.get_table_names())
     is_pg = db.engine.dialect.name == "postgresql"
+    false = "FALSE" if is_pg else "0"
     wanted = {
-        "has_backup": "BOOLEAN NOT NULL DEFAULT " + ("FALSE" if is_pg else "0"),
-        "backup_blob": "BYTEA" if is_pg else "BLOB",
+        "secure_files": {
+            "has_backup": f"BOOLEAN NOT NULL DEFAULT {false}",
+            "backup_blob": "BYTEA" if is_pg else "BLOB",
+        },
+        "users": {
+            "role": "VARCHAR(20) NOT NULL DEFAULT 'user'",
+            "disabled": f"BOOLEAN NOT NULL DEFAULT {false}",
+        },
     }
 
     with db.engine.begin() as conn:
-        for name, ddl in wanted.items():
-            if name not in existing:
-                conn.execute(text(f"ALTER TABLE secure_files ADD COLUMN {name} {ddl}"))
+        for table, columns in wanted.items():
+            if table not in tables:
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+
+
+def _promote_admins(app):
+    """Make sure the system has an administrator.
+
+    * Accounts listed in ADMIN_EMAILS (optional) always get the admin role.
+    * If there is still no administrator, the oldest verified account becomes
+      one, so the very first person to register runs the system.
+    """
+    from sqlalchemy import func, select
+
+    from app.models import User
+
+    changed = False
+    emails = app.config["ADMIN_EMAILS"]
+    if emails:
+        for user in db.session.scalars(
+            select(User).where(User.email.in_(emails), User.role != "admin")
+        ).all():
+            user.role = "admin"
+            changed = True
+        if changed:
+            db.session.flush()
+
+    admins = db.session.scalar(
+        select(func.count()).select_from(User).where(User.role == "admin")
+    )
+    if not admins:
+        first = db.session.scalar(
+            select(User)
+            .where(User.is_verified.is_(True), User.disabled.is_(False))
+            .order_by(User.id)
+            .limit(1)
+        )
+        if first is not None:
+            first.role = "admin"
+            changed = True
+
+    if changed:
+        db.session.commit()

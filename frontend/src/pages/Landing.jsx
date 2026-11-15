@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import Icon from '../components/Icon';
 import Brand from '../components/Brand';
+import ThemeIcon from '../components/ThemeIcon';
 import { useBodyClass, useRevealOnScroll, useTheme, useTitle } from '../hooks';
 import { APP_NAME } from '../config';
 
@@ -18,7 +19,7 @@ export default function Landing() {
         <nav className="land-nav landing-nav">
           <Brand to="/" />
           <div className="actions">
-            <button className="btn btn-ghost btn-icon landing-theme" onClick={toggleTheme} type="button" aria-label="Toggle theme"><Icon name="moon" /></button>
+            <button className="btn btn-ghost btn-icon landing-theme" onClick={toggleTheme} type="button" aria-label="Toggle theme"><ThemeIcon /></button>
             <Link className="btn btn-ghost" to="/login">Log in</Link>
             <Link className="btn btn-primary" to="/register">Get started <Icon name="arrow" /></Link>
           </div>

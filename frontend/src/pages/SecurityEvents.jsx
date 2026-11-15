@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import Icon from '../components/Icon';
 import Time from '../components/Time';
 import HashText from '../components/HashText';
@@ -34,7 +33,6 @@ export default function SecurityEvents() {
     <>
       <div className="page-head">
         <div><h1>Security events</h1><p>Your most recent {events.length} audit-trail entries.</p></div>
-        <Link className="btn" to="/dashboard">&larr; Back to dashboard</Link>
       </div>
 
       <section className="card">

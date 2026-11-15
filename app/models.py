@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
+from sqlalchemy import false
 
 from app import db
 
@@ -18,11 +19,19 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
+    # Role-based access control: "user" | "analyst" | "admin" (see app/rbac.py).
+    role = db.Column(db.String(20), nullable=False, default="user", server_default="user")
+    # Set by an administrator to block an account without deleting its data.
+    disabled = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login_at = db.Column(db.DateTime, nullable=True)
 
     files = db.relationship("SecureFile", backref="owner", lazy=True)
     security_events = db.relationship("SecurityEvent", backref="user", lazy=True)
+
+    @property
+    def is_active(self):  # used by Flask-Login
+        return not self.disabled
 
 
 class SecureFile(db.Model):
@@ -49,6 +58,30 @@ class SecureFile(db.Model):
     backup_blob = db.deferred(db.Column(db.LargeBinary, nullable=True))
 
     security_events = db.relationship("SecurityEvent", backref="file", lazy=True)
+    # Deleting a file also removes every share of it.
+    shares = db.relationship(
+        "FileShare", backref="file", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class FileShare(db.Model):
+    """Read-only access to one file, granted by its owner to another user."""
+
+    __tablename__ = "file_shares"
+    __table_args__ = (
+        db.UniqueConstraint("file_id", "recipient_id", name="uq_share_file_recipient"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    file_id = db.Column(
+        db.Integer, db.ForeignKey("secure_files.id"), nullable=False, index=True
+    )
+    recipient_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    recipient = db.relationship("User", foreign_keys=[recipient_id])
 
 
 class SecurityEvent(db.Model):

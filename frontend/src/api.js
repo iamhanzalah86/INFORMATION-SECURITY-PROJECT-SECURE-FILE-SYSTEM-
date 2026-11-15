@@ -54,6 +54,9 @@ export const api = {
 
   // auth
   login: (d) => post('/api/login', d),
+  loginVerifyStatus: () => get('/api/login/verify'),
+  loginVerify: (d) => post('/api/login/verify', d),
+  loginResend: () => post('/api/login/resend'),
   logout: () => post('/api/logout'),
   register: (d) => post('/api/register', d),
   verifyStatus: () => get('/api/verify-email'),
@@ -76,9 +79,23 @@ export const api = {
   devTamper: (id) => post(`/api/dev/tamper/${id}`),
   getEvents: () => get('/api/security-events').then((d) => d.events),
 
+  // administration (analyst / admin roles only)
+  adminOverview: () => get('/api/admin/overview'),
+  adminUsers: () => get('/api/admin/users'),
+  adminSetRole: (id, role) => post(`/api/admin/users/${id}/role`, { role }),
+  adminSetDisabled: (id, disabled) => post(`/api/admin/users/${id}/disabled`, { disabled }),
+
+  // sharing (read-only access for another user)
+  listShares: (id) => get(`/api/files/${id}/shares`),
+  shareFile: (id, user) => post(`/api/files/${id}/shares`, { user }),
+  revokeShare: (id, shareId) => request('DELETE', `/api/files/${id}/shares/${shareId}`),
+  leaveShare: (shareId) => request('DELETE', `/api/shared/${shareId}`),
+  downloadShared(shareId, fallbackName) { return this.saveFrom(`/api/shared/${shareId}/download`, fallbackName); },
+
   // download: verified + decrypted by the server, then saved by the browser
-  async downloadFile(id, fallbackName = 'download') {
-    const res = await fetch(`/api/files/${id}/download`, { credentials: 'same-origin' });
+  downloadFile(id, fallbackName) { return this.saveFrom(`/api/files/${id}/download`, fallbackName); },
+  async saveFrom(downloadUrl, fallbackName = 'download') {
+    const res = await fetch(downloadUrl, { credentials: 'same-origin' });
     if (!res.ok) throw apiError(res, await parse(res));
     const disposition = res.headers.get('Content-Disposition') || '';
     const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);

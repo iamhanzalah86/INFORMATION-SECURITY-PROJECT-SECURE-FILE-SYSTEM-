@@ -13,11 +13,13 @@ SUBJECTS = {
     "REGISTER": "Verify your email",
     "RESET": "Reset your password",
     "RECOVER": "Confirm file recovery",
+    "LOGIN": "Confirm your sign-in",
 }
 INTRO = {
     "REGISTER": "Use this code to verify your email and finish creating your account.",
     "RESET": "Use this code to reset your password.",
     "RECOVER": "Use this code to confirm restoring a tampered file from its backup.",
+    "LOGIN": "Use this code to finish signing in. If this wasn't you, change your password now.",
 }
 
 

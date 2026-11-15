@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import Time from '../components/Time';
 import HashText from '../components/HashText';
 import ConfirmModal from '../components/ConfirmModal';
+import ShareModal from '../components/ShareModal';
 import ActivityChart from '../components/ActivityChart';
 import { Glider, useGlider } from '../components/Glider';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -40,7 +41,7 @@ export default function Dashboard() {
   useTitle('Dashboard');
   const { flash, clear } = useFlash();
   const { user } = useAuth();
-  const { setStats, version, bump } = useVault();
+  const { setStats, version } = useVault();
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -48,6 +49,7 @@ export default function Dashboard() {
   const [selected, setSelected] = useState(() => new Set());
   const [confirm, setConfirm] = useState(null); // { ids: number[], label: string }
   const [deleting, setDeleting] = useState(false);
+  const [shareFor, setShareFor] = useState(null); // file being shared
   const [chosen, setChosen] = useState(null);
   const [over, setOver] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -88,6 +90,7 @@ export default function Dashboard() {
 
   if (!data) return <DashboardSkeleton />;
   const { stats, recent_events: recent, activity, max_mb: MAX_MB, dev_tools: devTools } = data;
+  const shared = data.shared || [];
 
   /* ---------- upload ---------- */
   const pick = (f) => {
@@ -154,6 +157,27 @@ export default function Dashboard() {
     }
   };
 
+  const downloadShared = async (s) => {
+    clear();
+    try {
+      await api.downloadShared(s.share_id, s.original_filename);
+    } catch (err) {
+      flash(err.message, 'error');
+    }
+    await load();
+  };
+
+  const leaveShare = async (s) => {
+    clear();
+    try {
+      const r = await api.leaveShare(s.share_id);
+      flash(r.message, 'success');
+    } catch (err) {
+      flash(err.message, 'error');
+    }
+    await load();
+  };
+
   const simulateTamper = async (f) => {
     clear();
     try {
@@ -218,9 +242,8 @@ export default function Dashboard() {
         <div className="actions">
           {devTools && <span className="tag dev-tag" title="DEV_TOOLS=1 is set in .env">Demo tools on</span>}
           <form onSubmit={scan}>
-            <button className="btn" type="submit" disabled={scanning}><Icon name="scan" /> {scanning ? 'Scanning…' : 'Run integrity scan'}</button>
+            <button className="btn btn-primary" type="submit" disabled={scanning}><Icon name="scan" /> {scanning ? 'Scanning…' : 'Run integrity scan'}</button>
           </form>
-          <a className="btn btn-primary" href="#upload"><Icon name="upload" /> Upload file</a>
         </div>
       </div>
 
@@ -249,7 +272,7 @@ export default function Dashboard() {
 
       <section className="grid-2" id="upload">
         <div className="card">
-          <div className="card-head"><h2><Icon name="upload" /> Upload &amp; encrypt</h2><span className="tag">AES-256-GCM</span></div>
+          <div className="card-head"><h2><Icon name="upload" /> Upload &amp; encrypt</h2></div>
           <div className="card-pad">
             <form onSubmit={upload}>
               <label
@@ -300,8 +323,7 @@ export default function Dashboard() {
         {files.length === 0 ? (
           <div className="empty-compact">
             <span className="ico ico-brand"><Icon name="folder" /></span>
-            <div><b>No files yet</b><small>Upload a file above and it will appear here, encrypted.</small></div>
-            <a className="btn btn-sm" href="#upload"><Icon name="upload" /> Upload</a>
+            <div><b>No files yet</b><small>Drop a file in the box above and it will appear here, encrypted.</small></div>
           </div>
         ) : (
           <>
@@ -347,7 +369,7 @@ export default function Dashboard() {
                   {visible.map((f) => (
                     <tr key={f.id} className={selected.has(f.id) ? 'row-selected' : ''}>
                       <td className="chk-col"><input type="checkbox" className="chk" aria-label={`Select ${f.original_filename}`} checked={selected.has(f.id)} onChange={() => toggleOne(f.id)} /></td>
-                      <td><div className="fname"><FileType name={f.original_filename} /><div><b>{f.original_filename}</b><small>SHA-256 {f.sha256_hash.slice(0, 12)}…</small></div></div></td>
+                      <td><div className="fname"><FileType name={f.original_filename} /><div><b>{f.original_filename}</b><small>SHA-256 {f.sha256_hash.slice(0, 12)}…{f.shared_with > 0 && <span className="shared-note"> · Shared with {f.shared_with}</span>}</small></div></div></td>
                       <td className="hide-sm">{humanSize(f.file_size)}</td>
                       <td>{f.status === 'TAMPERED' ? <span className="badge badge-bad">Tampered</span> : <span className="badge badge-ok">Secure</span>}</td>
                       <td className="hide-sm muted"><Time value={f.uploaded_at} mode="date" /></td>
@@ -359,6 +381,11 @@ export default function Dashboard() {
                           {devTools && f.status !== 'TAMPERED' && (
                             <button type="button" className="btn btn-sm btn-warn" title="Demo only: corrupt the stored copy of this file" onClick={() => simulateTamper(f)}>
                               <Icon name="alert" /> <span className="hide-sm">Tamper</span>
+                            </button>
+                          )}
+                          {f.status !== 'TAMPERED' && (
+                            <button type="button" className="btn btn-sm" title="Share with another user" onClick={() => setShareFor(f)}>
+                              <Icon name="share" /> <span className="hide-sm">Share</span>
                             </button>
                           )}
                           <a className="btn btn-sm" href={`/api/files/${f.id}/download`} onClick={(e) => download(e, f)}><Icon name="download" /> <span className="hide-sm">Download</span></a>
@@ -383,6 +410,33 @@ export default function Dashboard() {
         )}
       </section>
 
+      {shared.length > 0 && (
+        <section className="card" id="shared" style={{ marginBottom: 20 }}>
+          <div className="card-head"><h2><Icon name="share" /> Shared with me</h2><span className="muted" style={{ fontSize: 13 }}>Read-only · verified on every download</span></div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>File</th><th>Owner</th><th className="hide-sm">Size</th><th className="hide-sm">Shared</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
+              <tbody>
+                {shared.map((s) => (
+                  <tr key={s.share_id}>
+                    <td><div className="fname"><FileType name={s.original_filename} /><div><b>{s.original_filename}</b>{s.status === 'TAMPERED' && <small className="bad-text">Owner must recover this file</small>}</div></div></td>
+                    <td><b>{s.owner}</b></td>
+                    <td className="hide-sm">{humanSize(s.file_size)}</td>
+                    <td className="hide-sm muted">{timeAgo(s.shared_at)}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button type="button" className="btn btn-sm" onClick={() => downloadShared(s)}><Icon name="download" /> <span className="hide-sm">Download</span></button>
+                        <button type="button" className="btn btn-sm btn-danger btn-icon" aria-label={`Remove ${s.original_filename} from my list`} title="Remove from my list" onClick={() => leaveShare(s)}><Icon name="x" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="grid-2">
         <div className="card">
           <div className="card-head"><h2><Icon name="activity" /> Recent activity</h2><Link to="/security-events" className="btn btn-sm">View all <Icon name="arrow" /></Link></div>
@@ -406,6 +460,8 @@ export default function Dashboard() {
           <ActivityChart activity={activity} />
         </div>
       </section>
+
+      {shareFor && <ShareModal file={shareFor} onClose={() => setShareFor(null)} onChanged={load} />}
 
       {confirm && (
         <ConfirmModal

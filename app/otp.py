@@ -15,6 +15,7 @@ from app.models import OtpCode, utcnow
 PURPOSE_REGISTER = "REGISTER"
 PURPOSE_RESET = "RESET"
 PURPOSE_RECOVER = "RECOVER"
+PURPOSE_LOGIN = "LOGIN"  # second factor at sign-in
 
 
 def _hash_code(email, purpose, code):

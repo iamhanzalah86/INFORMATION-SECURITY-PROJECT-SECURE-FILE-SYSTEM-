@@ -18,6 +18,7 @@ function Flash({ id, category, message, onDone }) {
     <div ref={ref} className={`flash flash-${category}`}>
       <Icon name={category === 'success' ? 'check' : category === 'error' ? 'alert' : 'info'} />
       <span>{message}</span>
+      <button type="button" className="flash-x" aria-label="Dismiss" onClick={() => onDone(id)}><Icon name="x" /></button>
     </div>
   );
 }

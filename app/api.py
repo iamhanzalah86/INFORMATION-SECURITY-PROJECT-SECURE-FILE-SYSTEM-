@@ -7,6 +7,7 @@ GET /api/csrf and sends it back in the X-CSRFToken header.
 """
 
 import hashlib
+import hmac
 import os
 import uuid
 from datetime import timedelta
@@ -16,6 +17,7 @@ from io import BytesIO
 from flask import Blueprint, current_app, jsonify, request, send_file, session
 from flask_login import current_user, login_user, logout_user
 from flask_wtf.csrf import generate_csrf
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import func, or_, select
 from werkzeug.utils import secure_filename
 
@@ -23,8 +25,9 @@ from app import db
 from app.auth import hash_password, verify_password
 from app.crypto import decrypt_bytes, encrypt_bytes
 from app.integrity import verify_data_integrity
-from app.models import SecureFile, SecurityEvent, User, utcnow
+from app.models import FileShare, SecureFile, SecurityEvent, User, utcnow
 from app.otp import (
+    PURPOSE_LOGIN,
     PURPOSE_RECOVER,
     PURPOSE_REGISTER,
     PURPOSE_RESET,
@@ -40,6 +43,7 @@ from app.routes import (
     log_event,
     mask_email,
 )
+from app.rbac import PERMISSIONS, ROLE_ADMIN, ROLE_ANALYST, ROLES, roles_required
 from app.storage import (
     delete_encrypted,
     read_backup,
@@ -49,6 +53,9 @@ from app.storage import (
 )
 
 api = Blueprint("api", __name__, url_prefix="/api")
+
+# Event types that count as alerts (besides anything containing "TAMPER").
+ALERT_EVENTS = ("LOGIN_FAILED", "RECOVERY_FAILED", "MFA_FAILED", "ACCESS_DENIED")
 
 
 # --------------------------------------------------
@@ -80,7 +87,12 @@ def iso(dt):
 
 
 def user_json(user):
-    return {"id": user.id, "username": user.username, "email": user.email}
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+    }
 
 
 def file_json(f):
@@ -266,6 +278,12 @@ def verify_email():
         return err(message)
 
     user.is_verified = True
+    # The first verified account (or one listed in ADMIN_EMAILS) is the administrator.
+    no_admin_yet = not db.session.scalar(
+        select(func.count()).select_from(User).where(User.role == ROLE_ADMIN)
+    )
+    if no_admin_yet or user.email in current_app.config["ADMIN_EMAILS"]:
+        user.role = ROLE_ADMIN
     log_event("ACCOUNT_VERIFIED", f"Email verified for {user.username}.", user_id=user.id)
     db.session.commit()
     session.pop("verify_email", None)
@@ -293,6 +311,7 @@ def login():
     d = body()
     identifier = str(d.get("username", "")).strip()
     password = str(d.get("password", ""))
+    admin_portal = str(d.get("portal", "")).strip().lower() == "admin"
 
     user = db.session.scalar(
         select(User).where(
@@ -333,11 +352,52 @@ def login():
                 + (message if ok else "Use the resend button below."),
             )
 
-        login_user(user)
-        user.last_login_at = utcnow()
-        log_event("LOGIN_SUCCESS", "Signed in successfully.", user_id=user.id)
-        db.session.commit()
-        return jsonify(user=user_json(user))
+        if user.disabled:
+            log_event(
+                "LOGIN_FAILED",
+                "Sign-in blocked: this account is disabled.",
+                user_id=user.id,
+            )
+            db.session.commit()
+            return err(
+                "This account has been disabled. Contact an administrator.", 403
+            )
+
+        if admin_portal and user.role not in (ROLE_ADMIN, ROLE_ANALYST):
+            # Right password, but this is not a staff account.
+            log_event(
+                "ACCESS_DENIED",
+                "Blocked: a normal user account tried the admin login.",
+                user_id=user.id,
+            )
+            db.session.commit()
+            return err(
+                "This account does not have admin access. Use the User login.", 403
+            )
+
+        if current_app.config["LOGIN_MFA"] and _device_is_trusted(user):
+            # This browser passed the emailed-code step recently ("remember this device").
+            return _finish_login(
+                user, "Signed in with password on a remembered device (code skipped)."
+            )
+
+        if current_app.config["LOGIN_MFA"]:
+            # Step 2 of 2: the password was right, now prove access to the inbox.
+            ok, message = issue_otp(user.email, PURPOSE_LOGIN, user.username)
+            if not ok and not message.startswith("Please wait"):
+                return err(message, 503)
+            session["mfa_user"] = user.id
+            return jsonify(
+                mfa_required=True,
+                otp_sent=ok,
+                masked_email=mask_email(user.email),
+                message="Enter the 6-digit code we emailed you to finish signing in."
+                if ok
+                else "A code was sent a moment ago. Check your email, or resend it "
+                "in a minute.",
+            )
+
+        return _finish_login(user, "Signed in successfully.")
 
     if user:
         log_event(
@@ -347,6 +407,120 @@ def login():
         )
         db.session.commit()
     return err("Invalid username or password.", 401)
+
+
+# ---- "Remember this device": skip the emailed code for 30 days ----------
+# The browser keeps a signed, HttpOnly cookie. It only ever replaces the code
+# step (the password is always required), it is tied to one account, it expires,
+# and it stops working as soon as that account's password changes.
+TRUST_COOKIE = "sv_trusted"
+TRUST_DAYS = 30
+
+
+def _trust_serializer():
+    return URLSafeTimedSerializer(
+        current_app.config["SECRET_KEY"], salt="trusted-device-v1"
+    )
+
+
+def _password_fingerprint(user):
+    return hashlib.sha256(user.password_hash.encode("utf-8")).hexdigest()[:32]
+
+
+def _device_is_trusted(user):
+    token = request.cookies.get(TRUST_COOKIE)
+    if not token:
+        return False
+    try:
+        data = _trust_serializer().loads(token, max_age=TRUST_DAYS * 86400)
+    except BadSignature:  # also raised when the token has expired
+        return False
+    return (
+        isinstance(data, dict)
+        and data.get("uid") == user.id
+        and hmac.compare_digest(str(data.get("pw", "")), _password_fingerprint(user))
+    )
+
+
+def _trust_device(response, user):
+    token = _trust_serializer().dumps(
+        {"uid": user.id, "pw": _password_fingerprint(user)}
+    )
+    response.set_cookie(
+        TRUST_COOKIE,
+        token,
+        max_age=TRUST_DAYS * 86400,
+        httponly=True,
+        samesite="Lax",
+        secure=current_app.config["SESSION_COOKIE_SECURE"],
+        path="/api",
+    )
+    return response
+
+
+def _finish_login(user, description):
+    login_user(user)
+    user.last_login_at = utcnow()
+    log_event("LOGIN_SUCCESS", description, user_id=user.id)
+    db.session.commit()
+    return jsonify(user=user_json(user))
+
+
+def _pending_mfa_user():
+    """The account that passed the password step and still owes a code."""
+    user_id = session.get("mfa_user")
+    user = db.session.get(User, user_id) if user_id else None
+    if user is None or user.disabled or not user.is_verified:
+        session.pop("mfa_user", None)
+        return None
+    return user
+
+
+@api.get("/login/verify")
+def login_verify_status():
+    user = _pending_mfa_user()
+    if user is None:
+        return err("Please log in first.", 404, goto="login")
+    return jsonify(
+        masked_email=mask_email(user.email), ttl=current_app.config["OTP_TTL_MINUTES"]
+    )
+
+
+@api.post("/login/verify")
+def login_verify():
+    user = _pending_mfa_user()
+    if user is None:
+        return err("Please log in first.", 404, goto="login")
+
+    ok, message = verify_otp(user.email, PURPOSE_LOGIN, str(body().get("otp", "")))
+    if not ok:
+        log_event(
+            "MFA_FAILED",
+            "Wrong or expired sign-in code after a correct password.",
+            user_id=user.id,
+        )
+        db.session.commit()
+        return err(message)
+
+    session.pop("mfa_user", None)
+    remember = bool(body().get("remember"))
+    if remember:
+        log_event(
+            "DEVICE_TRUSTED",
+            f"This browser will skip the sign-in code for {TRUST_DAYS} days.",
+            user_id=user.id,
+        )
+    response = _finish_login(user, "Signed in with password + emailed code (MFA).")
+    return _trust_device(response, user) if remember else response
+
+
+@api.post("/login/resend")
+def login_resend():
+    user = _pending_mfa_user()
+    if user is None:
+        return err("Please log in first.", 404, goto="login")
+    ok, message = issue_otp(user.email, PURPOSE_LOGIN, user.username)
+    return jsonify(ok=ok, message=message)
 
 
 @api.post("/logout")
@@ -497,15 +671,25 @@ def dashboard():
         if b is None:
             continue
         b["total"] += 1
-        if "TAMPER" in etype or etype in ("LOGIN_FAILED", "RECOVERY_FAILED"):
+        if "TAMPER" in etype or etype in ALERT_EVENTS:
             b["alerts"] += 1
     activity = [
         {"date": d.isoformat(), "total": v["total"], "alerts": v["alerts"]}
         for d, v in buckets.items()
     ]
 
+    share_counts = dict(
+        db.session.execute(
+            select(FileShare.file_id, func.count())
+            .join(SecureFile, SecureFile.id == FileShare.file_id)
+            .where(SecureFile.user_id == current_user.id)
+            .group_by(FileShare.file_id)
+        ).all()
+    )
+
     return jsonify(
-        files=[file_json(f) for f in files],
+        files=[dict(file_json(f), shared_with=share_counts.get(f.id, 0)) for f in files],
+        shared=_shared_with_me(),
         stats={
             "total": len(files),
             "secure": len(files) - tampered,
@@ -586,6 +770,15 @@ def download_file(file_id):
     record = own_file(file_id)
     if record is None:
         return err("File not found.", 404)
+    return _send_verified(record)
+
+
+def _send_verified(record, shared=False):
+    """Verify integrity, decrypt and send a file.
+
+    `shared=True` means the signed-in user is a recipient, not the owner. The
+    same checks run either way; tamper alerts always go to the owner.
+    """
 
     def record_tampering(reason):
         try:
@@ -593,7 +786,7 @@ def download_file(file_id):
             log_event(
                 "FILE_TAMPERING_DETECTED",
                 f"Integrity verification failed for {record.original_filename}: {reason}",
-                user_id=current_user.id,
+                user_id=record.user_id,
                 file_id=record.id,
             )
             db.session.commit()
@@ -629,12 +822,28 @@ def download_file(file_id):
 
     if record.status != "TAMPERED":
         record.status = "SECURE"
-    log_event(
-        "FILE_DOWNLOADED",
-        f"Verified and downloaded {record.original_filename}.",
-        user_id=current_user.id,
-        file_id=record.id,
-    )
+    if shared:
+        log_event(
+            "FILE_DOWNLOADED",
+            f"Verified and downloaded {record.original_filename} "
+            f"(shared by {record.owner.username}).",
+            user_id=current_user.id,
+            file_id=record.id,
+        )
+        log_event(
+            "FILE_SHARE_DOWNLOADED",
+            f"{current_user.username} downloaded your shared file "
+            f"{record.original_filename}.",
+            user_id=record.user_id,
+            file_id=record.id,
+        )
+    else:
+        log_event(
+            "FILE_DOWNLOADED",
+            f"Verified and downloaded {record.original_filename}.",
+            user_id=current_user.id,
+            file_id=record.id,
+        )
     db.session.commit()
 
     return send_file(
@@ -667,6 +876,161 @@ def delete_file(file_id):
         current_app.logger.exception("File deletion failed")
         return err("Could not delete the file.", 500)
     return jsonify(message=f"'{name}' was permanently deleted.")
+
+
+# --------------------------------------------------
+# sharing: the owner gives another user read-only access to one file
+# --------------------------------------------------
+
+def _share_json(share):
+    return {
+        "id": share.id,
+        "username": share.recipient.username,
+        "created_at": iso(share.created_at),
+    }
+
+
+def _shared_with_me():
+    shares = db.session.scalars(
+        select(FileShare)
+        .where(FileShare.recipient_id == current_user.id)
+        .order_by(FileShare.id.desc())
+    ).all()
+    return [
+        {
+            "share_id": s.id,
+            "original_filename": s.file.original_filename,
+            "file_size": s.file.file_size,
+            "status": s.file.status,
+            "owner": s.file.owner.username,
+            "shared_at": iso(s.created_at),
+        }
+        for s in shares
+    ]
+
+
+def _my_incoming_share(share_id):
+    return db.session.scalar(
+        select(FileShare).where(
+            FileShare.id == share_id, FileShare.recipient_id == current_user.id
+        )
+    )
+
+
+@api.get("/files/<int:file_id>/shares")
+@login_required_api
+def list_shares(file_id):
+    record = own_file(file_id)
+    if record is None:
+        return err("File not found.", 404)
+    return jsonify(shares=[_share_json(s) for s in record.shares])
+
+
+@api.post("/files/<int:file_id>/shares")
+@login_required_api
+def share_file(file_id):
+    record = own_file(file_id)  # only the owner can share
+    if record is None:
+        return err("File not found.", 404)
+    if record.status == "TAMPERED":
+        return err("Recover this file before sharing it.", 409)
+
+    who = str(body().get("user", "")).strip()
+    if not who:
+        return err("Enter a username or email.")
+
+    target = db.session.scalar(
+        select(User).where(
+            or_(func.lower(User.username) == who.lower(), User.email == who.lower()),
+            User.is_verified.is_(True),
+            User.disabled.is_(False),
+        )
+    )
+    if target is None:
+        return err("No active account found with that username or email.", 404)
+    if target.id == current_user.id:
+        return err("You already own this file.")
+
+    already = db.session.scalar(
+        select(FileShare).where(
+            FileShare.file_id == record.id, FileShare.recipient_id == target.id
+        )
+    )
+    if already is not None:
+        return err(f"Already shared with {target.username}.", 409)
+
+    share = FileShare(file_id=record.id, recipient_id=target.id)
+    db.session.add(share)
+    log_event(
+        "FILE_SHARED",
+        f"{record.original_filename} was shared with {target.username} (read-only).",
+        user_id=current_user.id,
+        file_id=record.id,
+    )
+    log_event(
+        "FILE_RECEIVED",
+        f"{current_user.username} shared {record.original_filename} with you.",
+        user_id=target.id,
+        file_id=record.id,
+    )
+    db.session.commit()
+    return jsonify(
+        message=f"Shared with {target.username}. They can download it, not change it.",
+        share=_share_json(share),
+    )
+
+
+@api.delete("/files/<int:file_id>/shares/<int:share_id>")
+@login_required_api
+def revoke_share(file_id, share_id):
+    record = own_file(file_id)
+    if record is None:
+        return err("File not found.", 404)
+    share = db.session.scalar(
+        select(FileShare).where(
+            FileShare.id == share_id, FileShare.file_id == record.id
+        )
+    )
+    if share is None:
+        return err("Share not found.", 404)
+
+    name = share.recipient.username
+    log_event(
+        "FILE_SHARE_REVOKED",
+        f"Access of {name} to {record.original_filename} was removed.",
+        user_id=current_user.id,
+        file_id=record.id,
+    )
+    db.session.delete(share)
+    db.session.commit()
+    return jsonify(message=f"{name} can no longer open this file.")
+
+
+@api.get("/shared")
+@login_required_api
+def shared_with_me():
+    return jsonify(shared=_shared_with_me())
+
+
+@api.get("/shared/<int:share_id>/download")
+@login_required_api
+def download_shared(share_id):
+    share = _my_incoming_share(share_id)
+    if share is None:
+        return err("File not found.", 404)
+    return _send_verified(share.file, shared=True)
+
+
+@api.delete("/shared/<int:share_id>")
+@login_required_api
+def leave_share(share_id):
+    share = _my_incoming_share(share_id)
+    if share is None:
+        return err("File not found.", 404)
+    name = share.file.original_filename
+    db.session.delete(share)
+    db.session.commit()
+    return jsonify(message=f"'{name}' was removed from your shared files.")
 
 
 # --------------------------------------------------
@@ -860,6 +1224,139 @@ def security_events():
         .limit(200)
     ).all()
     return jsonify(events=[event_json(e) for e in events])
+
+
+# --------------------------------------------------
+# administration (RBAC: see app/rbac.py)
+# --------------------------------------------------
+
+def _admin_user_json(u, file_count):
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "role": u.role,
+        "disabled": bool(u.disabled),
+        "is_verified": bool(u.is_verified),
+        "files": file_count,
+        "created_at": iso(u.created_at),
+        "last_login_at": iso(u.last_login_at),
+    }
+
+
+@api.get("/admin/overview")
+@roles_required(ROLE_ANALYST, ROLE_ADMIN)
+def admin_overview():
+    """System-wide monitoring: totals and the latest events of every account."""
+    since = utcnow() - timedelta(hours=24)
+
+    def count(model, *conditions):
+        return db.session.scalar(
+            select(func.count()).select_from(model).where(*conditions)
+        )
+
+    alert_filter = or_(
+        SecurityEvent.event_type.like("%TAMPER%"),
+        SecurityEvent.event_type.in_(ALERT_EVENTS),
+    )
+    rows = db.session.execute(
+        select(SecurityEvent, User.username)
+        .outerjoin(User, SecurityEvent.user_id == User.id)
+        .order_by(SecurityEvent.id.desc())
+        .limit(200)
+    ).all()
+
+    events = []
+    for event, username in rows:
+        item = event_json(event)
+        item["username"] = username or "—"
+        events.append(item)
+
+    return jsonify(
+        stats={
+            "users": count(User),
+            "disabled": count(User, User.disabled.is_(True)),
+            "files": count(SecureFile),
+            "tampered": count(SecureFile, SecureFile.status == "TAMPERED"),
+            "events_24h": count(SecurityEvent, SecurityEvent.timestamp >= since),
+            "alerts_24h": count(
+                SecurityEvent, SecurityEvent.timestamp >= since, alert_filter
+            ),
+        },
+        events=events,
+        permissions=PERMISSIONS,
+    )
+
+
+@api.get("/admin/users")
+@roles_required(ROLE_ADMIN)
+def admin_users():
+    users = db.session.scalars(select(User).order_by(User.id)).all()
+    counts = dict(
+        db.session.execute(
+            select(SecureFile.user_id, func.count()).group_by(SecureFile.user_id)
+        ).all()
+    )
+    return jsonify(
+        users=[_admin_user_json(u, counts.get(u.id, 0)) for u in users],
+        roles=list(ROLES),
+    )
+
+
+def _other_user(user_id):
+    """Target account of an admin action; admins cannot change themselves."""
+    if user_id == current_user.id:
+        return None, err("You cannot change your own account here.", 409)
+    target = db.session.get(User, user_id)
+    if target is None:
+        return None, err("User not found.", 404)
+    return target, None
+
+
+@api.post("/admin/users/<int:user_id>/role")
+@roles_required(ROLE_ADMIN)
+def admin_set_role(user_id):
+    target, problem = _other_user(user_id)
+    if problem:
+        return problem
+
+    role = str(body().get("role", "")).strip().lower()
+    if role not in ROLES:
+        return err("Unknown role.")
+
+    if role != target.role:
+        old = target.role
+        target.role = role
+        log_event(
+            "ROLE_CHANGED",
+            f"Role of {target.username} changed from {old} to {role} "
+            f"by {current_user.username}.",
+            user_id=target.id,
+        )
+        db.session.commit()
+    return jsonify(message=f"{target.username} is now '{role}'.")
+
+
+@api.post("/admin/users/<int:user_id>/disabled")
+@roles_required(ROLE_ADMIN)
+def admin_set_disabled(user_id):
+    target, problem = _other_user(user_id)
+    if problem:
+        return problem
+
+    disabled = bool(body().get("disabled"))
+    if disabled != bool(target.disabled):
+        target.disabled = disabled
+        log_event(
+            "ACCOUNT_DISABLED" if disabled else "ACCOUNT_ENABLED",
+            f"Account {target.username} was {'disabled' if disabled else 're-enabled'} "
+            f"by {current_user.username}.",
+            user_id=target.id,
+        )
+        db.session.commit()
+    return jsonify(
+        message=f"{target.username} was {'disabled' if disabled else 're-enabled'}."
+    )
 
 
 # --------------------------------------------------

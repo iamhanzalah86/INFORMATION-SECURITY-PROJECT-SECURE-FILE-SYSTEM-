@@ -10,6 +10,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Recover from './pages/Recover';
 import SecurityEvents from './pages/SecurityEvents';
+import Admin from './pages/Admin';
 import { useAuth } from './context';
 
 function ScrollTop() {
@@ -44,6 +45,7 @@ export default function App() {
 
         <Route element={<GuestOnly><AuthLayout /></GuestOnly>}>
           <Route path="/login" element={<Login />} />
+          <Route path="/login/verify" element={<VerifyOtp mode="login" />} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-email" element={<VerifyOtp mode="register" />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -54,6 +56,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/recover/:fileId" element={<Recover />} />
           <Route path="/security-events" element={<SecurityEvents />} />
+          <Route path="/admin" element={<Admin />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
